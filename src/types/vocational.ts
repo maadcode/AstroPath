@@ -10,6 +10,14 @@ export interface VocationalScores {
   biz: number;   // Gestión y Análisis de Negocios (Organización, personas, prioridades)
 }
 
+export interface MinigameMetrics {
+  primaryScore: number;         // 0 a 100 puntuación principal
+  secondaryBranch?: CareerBranch;
+  secondaryScore?: number;       // 0 a 100 puntos extra
+  details: { [key: string]: number | string };
+  feedbackSummary: string;
+}
+
 export interface StationData {
   id: string;
   name: string;
@@ -33,4 +41,5 @@ export interface StationData {
   completed: boolean;
   timeSpentSeconds: number;
   enjoymentRating?: number; // 1 to 5
+  minigameMetrics?: MinigameMetrics;
 }

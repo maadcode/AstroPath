@@ -24,9 +24,16 @@ export class SpaceShipScene extends Phaser.Scene {
   private gameState = GameState.getInstance();
   private nearbyNpc: InteractiveNPC | null = null;
   private isInteracting = false;
+  private lastInteractionEndTime = 0;
+  private readonly INTERACTION_COOLDOWN_MS = 350;
 
   constructor() {
     super('SpaceShipScene');
+  }
+
+  private endInteraction() {
+    this.isInteracting = false;
+    this.lastInteractionEndTime = this.time.now;
   }
 
   create() {
@@ -72,6 +79,14 @@ export class SpaceShipScene extends Phaser.Scene {
     if (!this.scene.isActive('DialogScene')) {
       this.scene.launch('DialogScene');
     }
+
+    // 8. Asegurar liberación de controles al reanudar la escena
+    this.events.on('resume', () => {
+      const dialogScene = this.scene.get('DialogScene') as DialogScene;
+      if (!dialogScene || !dialogScene.isDialogVisible()) {
+        this.endInteraction();
+      }
+    });
   }
 
   update() {
@@ -147,34 +162,22 @@ export class SpaceShipScene extends Phaser.Scene {
       {
         stationId: 'station_dev',
         leaderX: 450, leaderY: 380,
-        passengers: [
-          { pId: 'p_dev_1', x: 340, y: 460 },
-          { pId: 'p_dev_2', x: 560, y: 460 }
-        ]
+        passengers: []
       },
       {
         stationId: 'station_net',
         leaderX: 1950, leaderY: 380,
-        passengers: [
-          { pId: 'p_net_1', x: 1840, y: 460 },
-          { pId: 'p_net_2', x: 2060, y: 460 }
-        ]
+        passengers: []
       },
       {
         stationId: 'station_sec',
         leaderX: 450, leaderY: 1420,
-        passengers: [
-          { pId: 'p_sec_1', x: 340, y: 1500 },
-          { pId: 'p_sec_2', x: 560, y: 1500 }
-        ]
+        passengers: []
       },
       {
         stationId: 'station_data',
         leaderX: 1950, leaderY: 1420,
-        passengers: [
-          { pId: 'p_data_1', x: 1840, y: 1500 },
-          { pId: 'p_data_2', x: 2060, y: 1500 }
-        ]
+        passengers: []
       },
       {
         stationId: 'station_biz',
@@ -303,6 +306,10 @@ export class SpaceShipScene extends Phaser.Scene {
   private handleInteractionInput() {
     if (this.isInteracting || !this.nearbyNpc) return;
 
+    if (this.time.now - this.lastInteractionEndTime < this.INTERACTION_COOLDOWN_MS) {
+      return;
+    }
+
     const uiScene = this.scene.get('UIScene') as UIScene;
     const isMobileAction = uiScene ? uiScene.isActionButtonPressed : false;
 
@@ -311,6 +318,7 @@ export class SpaceShipScene extends Phaser.Scene {
                       isMobileAction;
 
     if (isPressed) {
+      if (uiScene) uiScene.isActionButtonPressed = false;
       this.triggerInteraction(this.nearbyNpc);
     }
   }
@@ -322,7 +330,7 @@ export class SpaceShipScene extends Phaser.Scene {
     const station = this.gameState.getStation(npc.stationId);
 
     if (!station) {
-      this.isInteracting = false;
+      this.endInteraction();
       return;
     }
 
@@ -331,7 +339,7 @@ export class SpaceShipScene extends Phaser.Scene {
       dialogScene.showSimpleDialog(
         `${station.name} (Completada)`,
         `¡Todo marcha sobre ruedas por aquí! Gracias por tu valiosa ayuda.`,
-        () => { this.isInteracting = false; }
+        () => { this.endInteraction(); }
       );
       return;
     }
@@ -347,8 +355,12 @@ export class SpaceShipScene extends Phaser.Scene {
           `${passenger.name} (${passenger.role})`,
           `"${passenger.dialogue}"\n\n💡 Observación: ${passenger.hint}`,
           () => {
-            this.isInteracting = false;
-            uiScene.updateHUD(`Hablaste con ${passenger.name}. Reúne más testimonios o vuelve con el encargado.`);
+            this.endInteraction();
+            if (station.id === 'station_biz') {
+              uiScene.updateHUD(`Hablaste con ${passenger.name}. Reúne más testimonios o vuelve con la encargada.`);
+            } else {
+              uiScene.updateHUD(`Hablaste con ${passenger.name}. Dirígete al encargado ${station.leaderNpcName} para el desafío técnico.`);
+            }
           }
         );
       }
@@ -360,44 +372,108 @@ export class SpaceShipScene extends Phaser.Scene {
       // Iniciar temporizador de la estación si no estaba activo
       this.gameState.startStationTimer(station.id);
 
-      // Comprobar si ya escuchó a los pasajeros
-      const allWitnesses = this.gameState.allPassengersVisited(station.id);
+      // Solo la estación de gestión y análisis (station_biz) requiere consultar pasajeros antes de resolver
+      const requiresWitnesses = station.id === 'station_biz';
+      const allWitnesses = !requiresWitnesses || this.gameState.allPassengersVisited(station.id);
 
       if (!allWitnesses) {
-        // Explicación inicial del dilema
+        // Explicación inicial del dilema (exclusivo de estación social/gestión)
         dialogScene.showSimpleDialog(
           `${station.leaderNpcName} - ${station.leaderTitle}`,
-          `${station.dilemmaText}\n\n👉 Misión: Acércate a los tripulantes cercanos con iconos amarillos para escuchar sus experiencias antes de proponer una solución.`,
+          `${station.dilemmaText}\n\n👉 Misión de Mediación: Acércate a los tripulantes cercanos en el salón con iconos amarillos para escuchar sus opiniones antes de definir una solución.`,
           () => {
-            this.isInteracting = false;
+            this.endInteraction();
             uiScene.updateHUD(`Misión activa: Escucha a los tripulantes en ${station.name}`);
           }
         );
       } else {
-        // Ya escuchó el feedback: Momento de tomar la decisión
-        const optionsTexts = station.resolutionOptions.map((o: any) => o.text);
-        dialogScene.showDecisionDialog(
-          `Propuesta para ${station.name}`,
-          `Has escuchado las necesidades de la tripulación. ¿Cuál consideras que es la mejor manera de resolver este problema?`,
-          optionsTexts,
-          (selectedIndex: number) => {
-            // Pregunta de cómo se sintió (emoción)
-            dialogScene.showEmotionQuestion((rating: number) => {
-              this.gameState.completeStation(station.id, selectedIndex, rating);
-              npc.indicator.setTexture('check_bubble');
-              this.isInteracting = false;
-              uiScene.updateHUD();
-
-              // Si terminó las 5 estaciones, abrir informe final
-              if (this.gameState.isGameComplete()) {
-                this.time.delayedCall(1000, () => {
-                  this.scene.stop('UIScene');
-                  this.scene.start('ReportScene');
-                });
-              }
-            });
+        const minigameMap: { [id: string]: { scene: string; intro: string } } = {
+          station_net: {
+            scene: 'NetworkMinigameScene',
+            intro: `${station.dilemmaText}\n\n📡 Consola de telecomunicaciones: rutea los cables elásticos entre terminales para restablecer el enlace con baja latencia.`
+          },
+          station_sec: {
+            scene: 'SecurityMinigameScene',
+            intro: `${station.dilemmaText}\n\n🛡️ Cámara de blindaje balístico: manipula las compuertas deflectoras para desviar el malware a cuarentena y proteger la bóveda.`
+          },
+          station_dev: {
+            scene: 'RoboticsMinigameScene',
+            intro: `${station.dilemmaText}\n\n🤖 Bahía de ensamblaje: utiliza el brazo articulado con la pinza magnética para encajar los componentes en el chasis del robot asistente.`
+          },
+          station_data: {
+            scene: 'DataMinigameScene',
+            intro: `${station.dilemmaText}\n\n🌱 Laboratorio de datos: equilibra la balanza analítica dosificando nutrientes para estabilizar los bio-sensores.`
           }
-        );
+        };
+
+        const mgConfig = minigameMap[station.id];
+
+        // Función para procesar la resolución y preguntas de cierre
+        const proceedToResolution = (minigameMetrics?: any) => {
+          const optionsTexts = station.resolutionOptions.map((o: any) => o.text);
+          dialogScene.showDecisionDialog(
+            `Estrategia Final para ${station.name}`,
+            `Has analizado la situación y calibrado el sistema. ¿Cuál consideras que es la mejor estrategia para sellar esta solución de forma permanente?`,
+            optionsTexts,
+            (selectedIndex: number) => {
+              dialogScene.showEmotionQuestion((rating: number) => {
+                let finalMetrics = minigameMetrics;
+                // Si es la estación de gestión (negocios), registrar sus métricas de mediación
+                if (station.id === 'station_biz' && !finalMetrics) {
+                  finalMetrics = {
+                    primaryScore: 92,
+                    secondaryBranch: 'data',
+                    secondaryScore: 85,
+                    details: {
+                      'Consenso de Pasajeros': '94%',
+                      'Escucha Activa': '100%',
+                      'Optimización de Horarios': '92%'
+                    },
+                    feedbackSummary: 'Sobresaliente capacidad de negociación y escucha para crear armonía entre grupos con intereses opuestos.'
+                  };
+                }
+
+                this.gameState.completeStation(station.id, selectedIndex, rating, finalMetrics);
+                npc.indicator.setTexture('check_bubble');
+                this.endInteraction();
+                uiScene.updateHUD();
+
+                // Si terminó las 5 estaciones, abrir informe final
+                if (this.gameState.isGameComplete()) {
+                  this.time.delayedCall(1000, () => {
+                    this.scene.stop('UIScene');
+                    this.scene.start('ReportScene');
+                  });
+                }
+              });
+            }
+          );
+        };
+
+        // Si la estación tiene un minijuego de física Matter y aún no tiene métricas
+        if (mgConfig && !station.minigameMetrics) {
+          dialogScene.showSimpleDialog(
+            `${station.leaderNpcName} - ${station.leaderTitle}`,
+            `${mgConfig.intro}\n\n⚙️ Presiona 'Entendido' para abrir el simulador físico de la estación.`,
+            () => {
+              this.scene.pause('SpaceShipScene');
+              this.scene.launch(mgConfig.scene, {
+                onComplete: (metrics: any) => {
+                  this.scene.resume('SpaceShipScene');
+                  proceedToResolution(metrics);
+                },
+                onCancel: () => {
+                  this.scene.resume('SpaceShipScene');
+                  this.endInteraction();
+                  uiScene.updateHUD(`Desafío en pausa. Vuelve con ${station.leaderNpcName} cuando desees continuar.`);
+                }
+              });
+            }
+          );
+        } else {
+          // Estación de gestión o ya completó el minijuego
+          proceedToResolution(station.minigameMetrics);
+        }
       }
     }
   }

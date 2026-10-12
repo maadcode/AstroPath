@@ -1,4 +1,4 @@
-import { VocationalScores, StationData } from '../types/vocational';
+import { VocationalScores, StationData, MinigameMetrics } from '../types/vocational';
 import { STATIONS_DATA } from '../data/stations';
 
 export class GameState {
@@ -65,27 +65,61 @@ export class GameState {
     this.stationStartTimestamp = Date.now();
   }
 
-  public completeStation(stationId: string, chosenOptionIndex: number, enjoymentRating: number) {
+  public recordMinigameResult(stationId: string, metrics: MinigameMetrics) {
+    const station = this.getStation(stationId);
+    if (station) {
+      station.minigameMetrics = metrics;
+    }
+  }
+
+  public completeStation(stationId: string, chosenOptionIndex: number, enjoymentRating: number, metrics?: MinigameMetrics) {
     const station = this.getStation(stationId);
     if (!station || station.completed) return;
 
     station.completed = true;
     station.enjoymentRating = enjoymentRating;
+    if (metrics) {
+      station.minigameMetrics = metrics;
+    }
     
     // Calcular tiempo invertido
     const elapsedSeconds = Math.round((Date.now() - this.stationStartTimestamp) / 1000);
     station.timeSpentSeconds = elapsedSeconds;
 
-    // Ponderación de pesos por opción elegida
+    // Factor de disfrute emocional (1 a 5 -> 0.8x a 1.4x)
+    const enjoymentMultiplier = 0.8 + ((enjoymentRating - 1) * 0.15);
+
+    // 1. Ponderación por opción estratégica elegida
     const option = station.resolutionOptions[chosenOptionIndex];
     if (option) {
-      // Factor de disfrute emocional (1 a 5 -> 0.8x a 1.4x)
-      const enjoymentMultiplier = 0.8 + ((enjoymentRating - 1) * 0.15);
-
       const keys: (keyof VocationalScores)[] = ['dev', 'net', 'sec', 'data', 'biz'];
       for (const k of keys) {
         const baseWeight = option.weights[k] || 0;
         this.totalScores[k] += Math.round(baseWeight * enjoymentMultiplier * 10) / 10;
+      }
+    }
+
+    // 2. Ponderación por desempeño técnico y físico en el minijuego Matter
+    const finalMetrics = station.minigameMetrics || metrics;
+    if (finalMetrics) {
+      const stationBranchMap: { [id: string]: keyof VocationalScores } = {
+        station_dev: 'dev',
+        station_net: 'net',
+        station_sec: 'sec',
+        station_data: 'data',
+        station_biz: 'biz'
+      };
+
+      const primaryBranch = stationBranchMap[stationId];
+      if (primaryBranch) {
+        // Escalar 0 a 100 a un peso de 0 a 6.0 puntos vocacionales
+        const technicalWeight = (finalMetrics.primaryScore / 100) * 5.0;
+        this.totalScores[primaryBranch] += Math.round(technicalWeight * enjoymentMultiplier * 10) / 10;
+      }
+
+      if (finalMetrics.secondaryBranch && finalMetrics.secondaryScore) {
+        const secWeight = (finalMetrics.secondaryScore / 100) * 2.5;
+        this.totalScores[finalMetrics.secondaryBranch] += Math.round(secWeight * enjoymentMultiplier * 10) / 10;
       }
     }
   }

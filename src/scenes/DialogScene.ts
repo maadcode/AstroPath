@@ -11,6 +11,9 @@ export class DialogScene extends Phaser.Scene {
   private escKey!: Phaser.Input.Keyboard.Key;
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private enterKey!: Phaser.Input.Keyboard.Key;
+  private eKey!: Phaser.Input.Keyboard.Key;
+  private openedAt = 0;
+  private readonly CLOSE_DEBOUNCE_MS = 250;
 
   constructor() {
     super('DialogScene');
@@ -24,6 +27,7 @@ export class DialogScene extends Phaser.Scene {
       this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
       this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+      this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     }
 
     // Fondo oscurecido para enfocar la conversación
@@ -60,10 +64,16 @@ export class DialogScene extends Phaser.Scene {
 
   update() {
     if (this.activeCloseCallback && this.dialogContainer.visible) {
+      // Evitar que la misma pulsación que abrió el diálogo lo cierre inmediatamente
+      if (this.time.now - this.openedAt < this.CLOSE_DEBOUNCE_MS) {
+        return;
+      }
+
       if (
         Phaser.Input.Keyboard.JustDown(this.escKey) ||
         Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
-        Phaser.Input.Keyboard.JustDown(this.enterKey)
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.eKey)
       ) {
         const cb = this.activeCloseCallback;
         this.close();
@@ -77,16 +87,17 @@ export class DialogScene extends Phaser.Scene {
     this.dialogContainer.setVisible(true);
     this.backgroundDim.setVisible(true);
     this.activeCloseCallback = onClose;
+    this.openedAt = this.time.now;
 
     this.titleText.setText(title);
     this.messageText.setText(message);
 
-    // Botón Continuar / Entendido (con pista de tecla ESC)
+    // Botón Continuar / Entendido (con pista de teclas)
     const btnContainer = this.add.container(0, this.panelBg.height / 2 - 35);
-    const btnBg = this.add.rectangle(0, 0, 200, 40, 0x0284c7).setInteractive({ useHandCursor: true });
+    const btnBg = this.add.rectangle(0, 0, 240, 40, 0x0284c7).setInteractive({ useHandCursor: true });
     btnBg.setStrokeStyle(1, 0x38bdf8);
-    const btnText = this.add.text(0, 0, 'Entendido [ESC]', {
-      fontSize: '14px',
+    const btnText = this.add.text(0, 0, 'Entendido [ESPACIO / ESC]', {
+      fontSize: '13px',
       color: '#ffffff',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
@@ -201,6 +212,10 @@ export class DialogScene extends Phaser.Scene {
   private clearOptions() {
     this.optionButtons.forEach(btn => btn.destroy());
     this.optionButtons = [];
+  }
+
+  public isDialogVisible(): boolean {
+    return this.dialogContainer ? this.dialogContainer.visible : false;
   }
 
   private close() {
