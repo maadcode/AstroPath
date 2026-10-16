@@ -6,7 +6,11 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
-    // Generar texturas vectoriales procedurales limpias para personajes y entorno
+    // 1. Cargar el mapa y tileset de Kenney
+    this.load.image('scifi_tiles', 'assets/tilesets/colored_tilemap_packed.png');
+    this.load.tilemapTiledJSON('spaceship_map', 'assets/maps/spaceship.json');
+
+    // 2. Generar texturas vectoriales procedurales limpias para personajes y entorno
     this.createProceduralTextures();
   }
 

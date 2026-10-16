@@ -27,6 +27,10 @@ export class SpaceShipScene extends Phaser.Scene {
   private lastInteractionEndTime = 0;
   private readonly INTERACTION_COOLDOWN_MS = 350;
 
+  private map!: Phaser.Tilemaps.Tilemap;
+  private wallsLayer!: Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer;
+  private readonly TILE_SCALE = 4;
+
   constructor() {
     super('SpaceShipScene');
   }
@@ -37,29 +41,35 @@ export class SpaceShipScene extends Phaser.Scene {
   }
 
   create() {
-    // 1. Configurar límites de la nave espacial (Mundo de 2400 x 1800)
-    const worldWidth = 2400;
-    const worldHeight = 1800;
+    // 1. Cargar el Tilemap y configurar el tamaño del mundo
+    this.buildShipEnvironment();
+
+    const worldWidth = this.map.widthInPixels * this.TILE_SCALE;
+    const worldHeight = this.map.heightInPixels * this.TILE_SCALE;
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
-    // 2. Dibujar la nave estelar (Salas, Pasillos y Estaciones)
-    this.buildShipEnvironment(worldWidth, worldHeight);
-
-    // 3. Crear al Jugador
-    this.player = this.physics.add.sprite(worldWidth / 2, worldHeight / 2, 'player_sprite');
+    // 2. Crear al Jugador en el pasillo central del mapa (tile 33, 9)
+    const startX = 1072;
+    const startY = 304;
+    this.player = this.physics.add.sprite(startX, startY, 'player_sprite');
     this.player.setCollideWorldBounds(true);
-    this.player.setScale(1.4);
+    this.player.setScale(0.95);
     if (this.player.body) {
-      this.player.body.setSize(22, 22);
-      this.player.body.setOffset(5, 5);
+      this.player.body.setSize(16, 16);
+      this.player.body.setOffset(8, 12);
     }
 
-    // 4. Configurar Cámara con seguimiento suave
+    // 3. Activar colisión sólida del jugador contra las paredes del mapa
+    if (this.wallsLayer) {
+      this.physics.add.collider(this.player, this.wallsLayer);
+    }
+
+    // 4. Configurar Cámara con seguimiento suave y zoom para pixel art
     this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
     this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
-    this.cameras.main.setZoom(1.1);
+    this.cameras.main.setZoom(1.35);
 
-    // 5. Instanciar NPCs Jefes y Pasajeros en las 5 Estaciones
+    // 5. Instanciar NPCs Jefes y Pasajeros en las salas del mapa
     this.spawnStationNPCs();
 
     // 6. Controles por teclado
@@ -95,96 +105,97 @@ export class SpaceShipScene extends Phaser.Scene {
     this.handleInteractionInput();
   }
 
-  private buildShipEnvironment(worldWidth: number, worldHeight: number) {
-    const floorTiles = this.add.tileSprite(worldWidth / 2, worldHeight / 2, worldWidth, worldHeight, 'ship_floor');
-    floorTiles.setDepth(-10);
+  private buildShipEnvironment() {
+    // 1. Instanciar el mapa de baldosas exportado desde Tiled
+    this.map = this.make.tilemap({ key: 'spaceship_map' });
+    const tileset = this.map.addTilesetImage('wan', 'scifi_tiles');
 
-    // Pasillo Central de Tránsito
-    const hallway = this.add.rectangle(worldWidth / 2, worldHeight / 2, worldWidth * 0.85, 120, 0x111827, 0.5);
-    hallway.setStrokeStyle(2, 0x38bdf8, 0.4);
-    hallway.setDepth(-9);
+    if (tileset) {
+      // Capa 1: Suelo transitable
+      const floorLayer = this.map.createLayer('suelo', tileset);
+      if (floorLayer) {
+        floorLayer.setScale(this.TILE_SCALE);
+        floorLayer.setDepth(-10);
+      }
 
-    const verticalHallway = this.add.rectangle(worldWidth / 2, worldHeight / 2, 120, worldHeight * 0.85, 0x111827, 0.5);
-    verticalHallway.setStrokeStyle(2, 0x38bdf8, 0.4);
-    verticalHallway.setDepth(-9);
+      // Capa 2: Puertas
+      const doorsLayer = this.map.createLayer('puertas', tileset);
+      if (doorsLayer) {
+        doorsLayer.setScale(this.TILE_SCALE);
+        doorsLayer.setDepth(-9);
+      }
 
-    // Muros perimetrales
-    const wallThick = 32;
-    const addWall = (x: number, y: number, w: number, h: number) => {
-      const wall = this.add.tileSprite(x, y, w, h, 'ship_wall');
-      this.physics.add.existing(wall, true);
-    };
+      // Capa 3: Muros (Físicamente sólidos)
+      const walls = this.map.createLayer('muros', tileset);
+      if (walls) {
+        walls.setScale(this.TILE_SCALE);
+        walls.setDepth(-8);
+        walls.setCollisionByExclusion([-1]);
+        this.wallsLayer = walls;
+      }
 
-    addWall(worldWidth / 2, wallThick / 2, worldWidth, wallThick);
-    addWall(worldWidth / 2, worldHeight - wallThick / 2, worldWidth, wallThick);
-    addWall(wallThick / 2, worldHeight / 2, wallThick, worldHeight);
-    addWall(worldWidth - wallThick / 2, worldHeight / 2, wallThick, worldHeight);
+      // Capa 4: Decoraciones (consolas, computadoras, muebles)
+      const decorLayer = this.map.createLayer('decoraciones', tileset);
+      if (decorLayer) {
+        decorLayer.setScale(this.TILE_SCALE);
+        decorLayer.setDepth(-7);
+      }
+    }
 
-    // Crear las 5 Salas temáticas visibles
-    const roomPositions = [
-      { id: 'station_dev', x: 450, y: 380, name: 'TALLER DE CREACIÓN Y ROBÓTICA', color: 0x3b82f6 },
-      { id: 'station_net', x: 1950, y: 380, name: 'SALA DE ENLACE Y SEÑALES', color: 0x10b981 },
-      { id: 'station_sec', x: 450, y: 1420, name: 'ESTACIÓN DE VIGILANCIA Y BLINDAJE', color: 0xef4444 },
-      { id: 'station_data', x: 1950, y: 1420, name: 'INVERNADERO Y SENSORES', color: 0x8b5cf6 },
-      { id: 'station_biz', x: worldWidth / 2, y: worldHeight / 2 - 280, name: 'LOUNGE SOCIAL Y RECURSOS', color: 0xf59e0b }
+    // Carteles luminosos temáticos para cada sala del mapa
+    this.createStationLabels();
+  }
+
+  private createStationLabels() {
+    const labels = [
+      { x: 880, y: 55, name: 'TALLER DE ROBÓTICA', color: '#38bdf8' },
+      { x: 1232, y: 55, name: 'SALA DE ENLACE Y REDES', color: '#34d399' },
+      { x: 880, y: 245, name: 'CIBERSEGURIDAD Y BLINDAJE', color: '#f87171' },
+      { x: 880, y: 410, name: 'INVERNADERO Y SENSORES', color: '#c084fc' },
+      { x: 1232, y: 505, name: 'LOUNGE SOCIAL Y GESTIÓN', color: '#fbbf24' },
+      { x: 1072, y: 245, name: 'PASILLO CENTRAL', color: '#94a3b8' }
     ];
 
-    roomPositions.forEach(r => {
-      // Piso delimitado de la sala
-      const room = this.add.rectangle(r.x, r.y, 480, 360, 0x0f172a, 0.8);
-      room.setStrokeStyle(3, r.color, 0.9);
-      room.setDepth(-8);
-
-      // Cartel luminoso de la sala
-      this.add.text(r.x, r.y - 150, r.name, {
-        fontSize: '13px',
-        color: '#ffffff',
+    labels.forEach(l => {
+      this.add.text(l.x, l.y, l.name, {
+        fontSize: '10px',
+        color: l.color,
         fontStyle: 'bold',
-        backgroundColor: '#090d16',
-        padding: { x: 8, y: 4 }
-      }).setOrigin(0.5).setDepth(-7);
+        backgroundColor: '#090d16dd',
+        padding: { x: 5, y: 2 }
+      }).setOrigin(0.5).setDepth(-6);
     });
-
-    // Puente Central de Control (Punto de inicio y final)
-    const bridge = this.add.circle(worldWidth / 2, worldHeight / 2, 90, 0x1e293b, 0.7);
-    bridge.setStrokeStyle(2, 0x38bdf8);
-    bridge.setDepth(-8);
-    this.add.text(worldWidth / 2, worldHeight / 2, 'PUENTE CENTRAL\nPunto de Inicio', {
-      fontSize: '12px',
-      color: '#38bdf8',
-      align: 'center',
-      fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(-7);
   }
 
   private spawnStationNPCs() {
+    // Coordenadas calculadas exactamente dentro de las salas del nuevo mapa
     const configs = [
       {
         stationId: 'station_dev',
-        leaderX: 450, leaderY: 380,
+        leaderX: 880, leaderY: 112, // Sala superior izquierda (Taller)
         passengers: []
       },
       {
         stationId: 'station_net',
-        leaderX: 1950, leaderY: 380,
+        leaderX: 1232, leaderY: 144, // Sala superior derecha (Redes)
         passengers: []
       },
       {
         stationId: 'station_sec',
-        leaderX: 450, leaderY: 1420,
+        leaderX: 880, leaderY: 304, // Sala media izquierda (Seguridad)
         passengers: []
       },
       {
         stationId: 'station_data',
-        leaderX: 1950, leaderY: 1420,
+        leaderX: 880, leaderY: 464, // Sala inferior izquierda (Datos)
         passengers: []
       },
       {
         stationId: 'station_biz',
-        leaderX: 1200, leaderY: 620,
+        leaderX: 1232, leaderY: 592, // Sala inferior derecha (Lounge)
         passengers: [
-          { pId: 'p_biz_1', x: 1090, y: 690 },
-          { pId: 'p_biz_2', x: 1310, y: 690 }
+          { pId: 'p_biz_1', x: 1168, y: 624 },
+          { pId: 'p_biz_2', x: 1264, y: 624 }
         ]
       }
     ];
@@ -195,13 +206,13 @@ export class SpaceShipScene extends Phaser.Scene {
 
       // 1. NPC Jefe de la estación
       const leaderSprite = this.physics.add.sprite(c.leaderX, c.leaderY, 'npc_leader');
-      leaderSprite.setScale(1.4);
-      const ind = this.add.sprite(c.leaderX, c.leaderY - 32, 'quest_bubble').setScale(0.85);
-      const name = this.add.text(c.leaderX, c.leaderY + 28, `${station.leaderNpcName}`, {
-        fontSize: '11px',
+      leaderSprite.setScale(0.95);
+      const ind = this.add.sprite(c.leaderX, c.leaderY - 26, 'quest_bubble').setScale(0.7);
+      const name = this.add.text(c.leaderX, c.leaderY + 22, `${station.leaderNpcName}`, {
+        fontSize: '10px',
         color: '#facc15',
         fontStyle: 'bold',
-        backgroundColor: '#050711',
+        backgroundColor: '#050711ee',
         padding: { x: 4, y: 2 }
       }).setOrigin(0.5);
 
@@ -220,12 +231,12 @@ export class SpaceShipScene extends Phaser.Scene {
         if (!pData) return;
 
         const pSprite = this.physics.add.sprite(pConf.x, pConf.y, 'npc_passenger');
-        pSprite.setScale(1.3);
-        const pInd = this.add.sprite(pConf.x, pConf.y - 30, 'quest_bubble').setScale(0.75);
-        const pName = this.add.text(pConf.x, pConf.y + 26, pData.name, {
-          fontSize: '10px',
+        pSprite.setScale(0.9);
+        const pInd = this.add.sprite(pConf.x, pConf.y - 24, 'quest_bubble').setScale(0.65);
+        const pName = this.add.text(pConf.x, pConf.y + 20, pData.name, {
+          fontSize: '9px',
           color: '#cbd5e1',
-          backgroundColor: '#050711',
+          backgroundColor: '#050711ee',
           padding: { x: 3, y: 1 }
         }).setOrigin(0.5);
 
@@ -244,7 +255,7 @@ export class SpaceShipScene extends Phaser.Scene {
     // Efecto flotante leve en los indicadores de misión
     this.tweens.add({
       targets: this.npcs.map(n => n.indicator),
-      y: '-=6',
+      y: '-=5',
       duration: 700,
       yoyo: true,
       repeat: -1,
