@@ -3,7 +3,7 @@ import { StationData } from '../types/vocational';
 export const STATIONS_DATA: StationData[] = [
   {
     id: 'station_dev',
-    name: 'Taller de Creación y Robótica',
+    name: 'Bahía de Ensamblaje',
     subname: 'Bahía de Ensamblaje',
     leaderNpcName: 'Mika',
     leaderTitle: 'La Inventora',
@@ -50,8 +50,8 @@ export const STATIONS_DATA: StationData[] = [
   },
   {
     id: 'station_net',
-    name: 'Centro de Enlace y Señales',
-    subname: 'Sala de Antenas',
+    name: 'Torre de Antenas',
+    subname: 'Torre de Antenas',
     leaderNpcName: 'Orion',
     leaderTitle: 'El Comunicador',
     accentColor: 0x10b981,
@@ -97,8 +97,8 @@ export const STATIONS_DATA: StationData[] = [
   },
   {
     id: 'station_sec',
-    name: 'Puesto de Control y Blindaje',
-    subname: 'Estación de Vigilancia',
+    name: 'Puesto de Vigilancia',
+    subname: 'Puesto de Vigilancia',
     leaderNpcName: 'Kael',
     leaderTitle: 'El Guardián',
     accentColor: 0xef4444,
@@ -144,7 +144,7 @@ export const STATIONS_DATA: StationData[] = [
   },
   {
     id: 'station_data',
-    name: 'Invernadero y Bio-Sensores',
+    name: 'Laboratorio de Cultivos',
     subname: 'Laboratorio de Cultivos',
     leaderNpcName: 'Nova',
     leaderTitle: 'La Investigadora',
@@ -191,8 +191,8 @@ export const STATIONS_DATA: StationData[] = [
   },
   {
     id: 'station_biz',
-    name: 'Sala Común y Cafetería Central',
-    subname: 'El Lounge Social',
+    name: 'Sala Común',
+    subname: 'Sala Común',
     leaderNpcName: 'Dra. Valeria',
     leaderTitle: 'La Coordinadora',
     accentColor: 0xf59e0b,

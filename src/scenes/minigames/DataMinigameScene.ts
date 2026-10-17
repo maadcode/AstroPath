@@ -83,7 +83,7 @@ export class DataMinigameScene extends Phaser.Scene {
     frame.setStrokeStyle(3, 0x8b5cf6);
 
     // Cabecera
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '📊 INVERNADERO BIO-SENSORES // BALANZA DE CORRELACIÓN Y DATOS', {
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '📊 LABORATORIO DE CULTIVOS // BALANZA BIO-SENSORIAL', {
       fontSize: '17px',
       color: '#c084fc',
       fontStyle: 'bold',
@@ -414,7 +414,7 @@ export class DataMinigameScene extends Phaser.Scene {
     const mBg = this.add.rectangle(0, 0, 520, 320, 0x090d16, 0.98);
     mBg.setStrokeStyle(2, 0x8b5cf6);
 
-    const title = this.add.text(0, -115, '📊 ¡CORRELACIÓN DE DATOS ESTABLECIDA!', {
+    const title = this.add.text(0, -115, '📊 ¡EQUILIBRIO BIO-SENSORIAL ESTABLECIDO!', {
       fontSize: '17px',
       color: '#c084fc',
       fontStyle: 'bold',

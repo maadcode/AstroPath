@@ -182,11 +182,11 @@ export class ReportScene extends Phaser.Scene {
     let curY = startY + 32;
 
     const stationCards = [
-      { id: 'station_net', name: '🖧 Redes: Patch Panel Elástico', color: '#34d399' },
-      { id: 'station_sec', name: '🛡️ Seguridad: Deflector Balístico', color: '#f87171' },
-      { id: 'station_dev', name: '🤖 Robótica: Brazo Cinemático', color: '#60a5fa' },
-      { id: 'station_data', name: '📊 Datos: Balanza Bio-Sensorial', color: '#c084fc' },
-      { id: 'station_biz', name: '🤝 Gestión: Mediación y Consenso', color: '#fbbf24' }
+      { id: 'station_net', name: '🖧 Torre de Antenas: Patch Panel Elástico', color: '#34d399' },
+      { id: 'station_sec', name: '🛡️ Puesto de Vigilancia: Deflector Balístico', color: '#f87171' },
+      { id: 'station_dev', name: '🤖 Bahía de Ensamblaje: Brazo Cinemático', color: '#60a5fa' },
+      { id: 'station_data', name: '📊 Laboratorio de Cultivos: Balanza Bio-Sensorial', color: '#c084fc' },
+      { id: 'station_biz', name: '🤝 Sala Común: Mediación y Consenso', color: '#fbbf24' }
     ];
 
     stationCards.forEach(sc => {

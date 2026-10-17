@@ -116,7 +116,7 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     frame.setStrokeStyle(3, 0x3b82f6);
 
     // Cabecera
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '🤖 BAHÍA DE ROBÓTICA // ENSAMBLAJE CINEMÁTICO DE PRECISIÓN', {
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '🤖 BAHÍA DE ENSAMBLAJE // MONTAJE CINEMÁTICO DE PRECISIÓN', {
       fontSize: '17px',
       color: '#60a5fa',
       fontStyle: 'bold',

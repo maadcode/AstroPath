@@ -148,11 +148,11 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private createStationLabels() {
     const labels = [
-      { x: 880, y: 55, name: 'TALLER DE ROBÓTICA', color: '#38bdf8' },
-      { x: 1232, y: 55, name: 'SALA DE ENLACE Y REDES', color: '#34d399' },
-      { x: 880, y: 245, name: 'CIBERSEGURIDAD Y BLINDAJE', color: '#f87171' },
-      { x: 880, y: 410, name: 'INVERNADERO Y SENSORES', color: '#c084fc' },
-      { x: 1232, y: 505, name: 'LOUNGE SOCIAL Y GESTIÓN', color: '#fbbf24' },
+      { x: 880, y: 55, name: 'BAHÍA DE ENSAMBLAJE', color: '#38bdf8' },
+      { x: 1232, y: 55, name: 'TORRE DE ANTENAS', color: '#34d399' },
+      { x: 880, y: 245, name: 'PUESTO DE VIGILANCIA', color: '#f87171' },
+      { x: 880, y: 410, name: 'LABORATORIO DE CULTIVOS', color: '#c084fc' },
+      { x: 1232, y: 505, name: 'SALA COMÚN', color: '#fbbf24' },
       { x: 1072, y: 245, name: 'PASILLO CENTRAL', color: '#94a3b8' }
     ];
 
@@ -401,11 +401,11 @@ export class SpaceShipScene extends Phaser.Scene {
         const minigameMap: { [id: string]: { scene: string; intro: string } } = {
           station_net: {
             scene: 'NetworkMinigameScene',
-            intro: `${station.dilemmaText}\n\n📡 Consola de telecomunicaciones: rutea los cables elásticos entre terminales para restablecer el enlace con baja latencia.`
+            intro: `${station.dilemmaText}\n\n📡 Torre de antenas: rutea los cables elásticos entre terminales para restablecer el enlace con baja latencia.`
           },
           station_sec: {
             scene: 'SecurityMinigameScene',
-            intro: `${station.dilemmaText}\n\n🛡️ Cámara de blindaje balístico: manipula las compuertas deflectoras para desviar el malware a cuarentena y proteger la bóveda.`
+            intro: `${station.dilemmaText}\n\n🛡️ Puesto de vigilancia: manipula las compuertas deflectoras para desviar el malware a cuarentena y proteger la bóveda.`
           },
           station_dev: {
             scene: 'RoboticsMinigameScene',
@@ -413,7 +413,7 @@ export class SpaceShipScene extends Phaser.Scene {
           },
           station_data: {
             scene: 'DataMinigameScene',
-            intro: `${station.dilemmaText}\n\n🌱 Laboratorio de datos: equilibra la balanza analítica dosificando nutrientes para estabilizar los bio-sensores.`
+            intro: `${station.dilemmaText}\n\n🌱 Laboratorio de cultivos: equilibra la balanza analítica dosificando nutrientes para estabilizar los bio-sensores.`
           }
         };
 
