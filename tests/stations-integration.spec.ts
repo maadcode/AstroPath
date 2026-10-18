@@ -8,8 +8,8 @@ test('Exiting station challenge without completing restores player controls and 
     const game = (window as any).__PHASER_GAME__;
     const spaceShip = game.scene.getScene('SpaceShipScene') as any;
 
-    // 1. Teleport player to station_dev leader Mika at (450, 380)
-    spaceShip.player.setPosition(450, 410);
+    // 1. Teleport player to station_dev leader Mika at (880, 112)
+    spaceShip.player.setPosition(880, 135);
     spaceShip.checkNPCProximity();
 
     // Verify nearby NPC is Mika
@@ -95,7 +95,7 @@ test('Only station_biz requires witness feedback before challenge', async ({ pag
     const dialogScene = game.scene.getScene('DialogScene') as any;
 
     // Test station_net (technical): should offer minigame directly
-    spaceShip.player.setPosition(1950, 410);
+    spaceShip.player.setPosition(1232, 165);
     spaceShip.checkNPCProximity();
     spaceShip.triggerInteraction(spaceShip.nearbyNpc);
     const netDialogMsg = dialogScene.messageText?.text;
@@ -103,7 +103,7 @@ test('Only station_biz requires witness feedback before challenge', async ({ pag
     spaceShip.endInteraction();
 
     // Test station_biz (social/management): should ask to listen to witnesses first!
-    spaceShip.player.setPosition(1200, 640);
+    spaceShip.player.setPosition(1232, 615);
     spaceShip.checkNPCProximity();
     spaceShip.triggerInteraction(spaceShip.nearbyNpc);
     const bizDialogMsg = dialogScene.messageText?.text;

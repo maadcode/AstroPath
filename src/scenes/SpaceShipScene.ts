@@ -298,6 +298,7 @@ export class SpaceShipScene extends Phaser.Scene {
   private checkNPCProximity() {
     const interactRadius = 60;
     let foundNearby: InteractiveNPC | null = null;
+    let closestDist = interactRadius;
 
     for (const npc of this.npcs) {
       const dist = Phaser.Math.Distance.Between(
@@ -305,9 +306,9 @@ export class SpaceShipScene extends Phaser.Scene {
         npc.sprite.x, npc.sprite.y
       );
 
-      if (dist <= interactRadius) {
+      if (dist <= closestDist) {
+        closestDist = dist;
         foundNearby = npc;
-        break;
       }
     }
 
@@ -414,6 +415,10 @@ export class SpaceShipScene extends Phaser.Scene {
           station_data: {
             scene: 'DataMinigameScene',
             intro: `${station.dilemmaText}\n\n🌱 Laboratorio de cultivos: equilibra la balanza analítica dosificando nutrientes para estabilizar los bio-sensores.`
+          },
+          station_biz: {
+            scene: 'BizMinigameScene',
+            intro: `${station.dilemmaText}\n\n📋 Tablero de prioridades: organiza las actividades semanales en las dos franjas horarias equilibrando la satisfacción de familias, investigadores y jóvenes.`
           }
         };
 
@@ -428,21 +433,7 @@ export class SpaceShipScene extends Phaser.Scene {
             optionsTexts,
             (selectedIndex: number) => {
               dialogScene.showEmotionQuestion((rating: number) => {
-                let finalMetrics = minigameMetrics;
-                // Si es la estación de gestión (negocios), registrar sus métricas de mediación
-                if (station.id === 'station_biz' && !finalMetrics) {
-                  finalMetrics = {
-                    primaryScore: 92,
-                    secondaryBranch: 'data',
-                    secondaryScore: 85,
-                    details: {
-                      'Consenso de Pasajeros': '94%',
-                      'Escucha Activa': '100%',
-                      'Optimización de Horarios': '92%'
-                    },
-                    feedbackSummary: 'Sobresaliente capacidad de negociación y escucha para crear armonía entre grupos con intereses opuestos.'
-                  };
-                }
+                const finalMetrics = minigameMetrics;
 
                 this.gameState.completeStation(station.id, selectedIndex, rating, finalMetrics);
                 npc.indicator.setTexture('check_bubble');
@@ -461,11 +452,12 @@ export class SpaceShipScene extends Phaser.Scene {
           );
         };
 
-        // Si la estación tiene un minijuego de física Matter y aún no tiene métricas
+        // Si la estación tiene un minijuego y aún no tiene métricas
         if (mgConfig && !station.minigameMetrics) {
+          const actionPrompt = station.id === 'station_biz' ? 'el tablero interactivo de mediación' : 'el simulador físico de la estación';
           dialogScene.showSimpleDialog(
             `${station.leaderNpcName} - ${station.leaderTitle}`,
-            `${mgConfig.intro}\n\n⚙️ Presiona 'Entendido' para abrir el simulador físico de la estación.`,
+            `${mgConfig.intro}\n\n⚙️ Presiona 'Entendido' para abrir ${actionPrompt}.`,
             () => {
               this.scene.pause('SpaceShipScene');
               this.scene.launch(mgConfig.scene, {

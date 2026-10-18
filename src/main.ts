@@ -8,6 +8,7 @@ import { NetworkMinigameScene } from './scenes/minigames/NetworkMinigameScene';
 import { SecurityMinigameScene } from './scenes/minigames/SecurityMinigameScene';
 import { RoboticsMinigameScene } from './scenes/minigames/RoboticsMinigameScene';
 import { DataMinigameScene } from './scenes/minigames/DataMinigameScene';
+import { BizMinigameScene } from './scenes/minigames/BizMinigameScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -40,7 +41,8 @@ const config: Phaser.Types.Core.GameConfig = {
     NetworkMinigameScene,
     SecurityMinigameScene,
     RoboticsMinigameScene,
-    DataMinigameScene
+    DataMinigameScene,
+    BizMinigameScene
   ]
 };
 
