@@ -12,6 +12,15 @@ export class PreloadScene extends Phaser.Scene {
 
     // 2. Generar texturas vectoriales procedurales limpias para personajes y entorno
     this.createProceduralTextures();
+
+    // 3. Cargar efectos de sonido básicos (WebAudio)
+    if (this.sound && (this.sound as any).context) {
+      this.load.audio('sfx_footsteps', 'assets/audio/footsteps.wav');
+      this.load.audio('sfx_dialog_open', 'assets/audio/dialog_open.wav');
+      this.load.audio('sfx_option_select', 'assets/audio/option_select.wav');
+      this.load.audio('sfx_station_complete', 'assets/audio/station_complete.wav');
+      this.load.audio('sfx_whoosh', 'assets/audio/whoosh.wav');
+    }
   }
 
   create() {

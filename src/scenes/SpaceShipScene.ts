@@ -27,6 +27,8 @@ export class SpaceShipScene extends Phaser.Scene {
   private lastInteractionEndTime = 0;
   private readonly INTERACTION_COOLDOWN_MS = 350;
 
+  private footstepsSound?: Phaser.Sound.BaseSound;
+
   private map!: Phaser.Tilemaps.Tilemap;
   private wallsLayer!: Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer;
   private readonly TILE_SCALE = 4;
@@ -95,6 +97,23 @@ export class SpaceShipScene extends Phaser.Scene {
       const dialogScene = this.scene.get('DialogScene') as DialogScene;
       if (!dialogScene || !dialogScene.isDialogVisible()) {
         this.endInteraction();
+      }
+    });
+
+    // 9. Configurar efectos de sonido (pasos)
+    if (this.sound && this.cache.audio.exists('sfx_footsteps')) {
+      this.footstepsSound = this.sound.add('sfx_footsteps', { loop: true, volume: 0.25 });
+    }
+
+    this.events.on('pause', () => {
+      if (this.footstepsSound && this.footstepsSound.isPlaying) {
+        this.footstepsSound.stop();
+      }
+    });
+
+    this.events.on('shutdown', () => {
+      if (this.footstepsSound) {
+        this.footstepsSound.stop();
       }
     });
   }
@@ -266,6 +285,9 @@ export class SpaceShipScene extends Phaser.Scene {
   private handlePlayerMovement() {
     if (this.isInteracting) {
       this.player.setVelocity(0, 0);
+      if (this.footstepsSound && this.footstepsSound.isPlaying) {
+        this.footstepsSound.stop();
+      }
       return;
     }
 
@@ -293,6 +315,18 @@ export class SpaceShipScene extends Phaser.Scene {
     }
 
     this.player.setVelocity(vx * speed, vy * speed);
+
+    // Control de audio de pasos metálicos suaves
+    const isMoving = (vx !== 0 || vy !== 0);
+    if (isMoving) {
+      if (this.footstepsSound && !this.footstepsSound.isPlaying) {
+        this.footstepsSound.play();
+      }
+    } else {
+      if (this.footstepsSound && this.footstepsSound.isPlaying) {
+        this.footstepsSound.stop();
+      }
+    }
   }
 
   private checkNPCProximity() {
@@ -337,6 +371,13 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private triggerInteraction(npc: InteractiveNPC) {
     this.isInteracting = true;
+    if (this.footstepsSound && this.footstepsSound.isPlaying) {
+      this.footstepsSound.stop();
+    }
+    if (this.sound && this.cache.audio.exists('sfx_dialog_open')) {
+      this.sound.play('sfx_dialog_open', { volume: 0.35 });
+    }
+
     const dialogScene = this.scene.get('DialogScene') as DialogScene;
     const uiScene = this.scene.get('UIScene') as UIScene;
     const station = this.gameState.getStation(npc.stationId);
@@ -436,6 +477,10 @@ export class SpaceShipScene extends Phaser.Scene {
                 const finalMetrics = minigameMetrics;
 
                 this.gameState.completeStation(station.id, selectedIndex, rating, finalMetrics);
+                if (this.sound && this.cache.audio.exists('sfx_station_complete')) {
+                  this.sound.play('sfx_station_complete', { volume: 0.6 });
+                }
+
                 npc.indicator.setTexture('check_bubble');
                 this.endInteraction();
                 uiScene.updateHUD();
@@ -459,13 +504,22 @@ export class SpaceShipScene extends Phaser.Scene {
             `${station.leaderNpcName} - ${station.leaderTitle}`,
             `${mgConfig.intro}\n\n⚙️ Presiona 'Entendido' para abrir ${actionPrompt}.`,
             () => {
+              if (this.sound && this.cache.audio.exists('sfx_whoosh')) {
+                this.sound.play('sfx_whoosh', { volume: 0.45 });
+              }
               this.scene.pause('SpaceShipScene');
               this.scene.launch(mgConfig.scene, {
                 onComplete: (metrics: any) => {
+                  if (this.sound && this.cache.audio.exists('sfx_whoosh')) {
+                    this.sound.play('sfx_whoosh', { volume: 0.4 });
+                  }
                   this.scene.resume('SpaceShipScene');
                   proceedToResolution(metrics);
                 },
                 onCancel: () => {
+                  if (this.sound && this.cache.audio.exists('sfx_whoosh')) {
+                    this.sound.play('sfx_whoosh', { volume: 0.4 });
+                  }
                   this.scene.resume('SpaceShipScene');
                   this.endInteraction();
                   uiScene.updateHUD(`Desafío en pausa. Vuelve con ${station.leaderNpcName} cuando desees continuar.`);

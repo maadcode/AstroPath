@@ -14,7 +14,7 @@ export class DialogScene extends Phaser.Scene {
   private eKey!: Phaser.Input.Keyboard.Key;
   private openedAt = 0;
   private readonly CLOSE_DEBOUNCE_MS = 250;
-  private readonly SKIP_DEBOUNCE_MS = 150;
+  private readonly SKIP_DEBOUNCE_MS = 60;
 
   // Typewriter effect state
   private readonly TYPEWRITER_DELAY_MS = 40; // 30-50ms por carácter
@@ -23,9 +23,26 @@ export class DialogScene extends Phaser.Scene {
   private isTyping = false;
   private typewriterTimer: Phaser.Time.TimerEvent | null = null;
   private decisionButtonsPending = false;
+  private lastDialogOpenSoundTime = 0;
 
   constructor() {
     super('DialogScene');
+  }
+
+  private playDialogOpenSound() {
+    if (this.time.now - this.lastDialogOpenSoundTime < 250) {
+      return;
+    }
+    if (this.sound && this.cache.audio.exists('sfx_dialog_open')) {
+      this.sound.play('sfx_dialog_open', { volume: 0.35 });
+    }
+    this.lastDialogOpenSoundTime = this.time.now;
+  }
+
+  private playOptionSelectSound() {
+    if (this.sound && this.cache.audio.exists('sfx_option_select')) {
+      this.sound.play('sfx_option_select', { volume: 0.45 });
+    }
   }
 
   create() {
@@ -83,11 +100,7 @@ export class DialogScene extends Phaser.Scene {
 
     // Saltar typewriter con clic en cualquier parte de la escena
     this.input.on('pointerdown', () => {
-      if (
-        this.dialogContainer.visible &&
-        this.isTyping &&
-        this.time.now - this.openedAt >= this.SKIP_DEBOUNCE_MS
-      ) {
+      if (this.dialogContainer.visible && this.isTyping) {
         this.finishTypewriter();
       }
     });
@@ -98,17 +111,13 @@ export class DialogScene extends Phaser.Scene {
       return;
     }
 
-    // Saltar typewriter al presionar Espacio o Enter (respetando debounce de apertura)
+    // Saltar typewriter al presionar Espacio o Enter
     if (this.isTyping) {
-      if (this.time.now - this.openedAt >= this.SKIP_DEBOUNCE_MS) {
-        if (
-          Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
-          Phaser.Input.Keyboard.JustDown(this.enterKey)
-        ) {
-          this.finishTypewriter();
-          return;
-        }
-      } else {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
+        Phaser.Input.Keyboard.JustDown(this.enterKey)
+      ) {
+        this.finishTypewriter();
         return;
       }
     }
@@ -126,6 +135,7 @@ export class DialogScene extends Phaser.Scene {
         Phaser.Input.Keyboard.JustDown(this.eKey)
       ) {
         const cb = this.activeCloseCallback;
+        this.playOptionSelectSound();
         this.close();
         cb();
       }
@@ -194,6 +204,7 @@ export class DialogScene extends Phaser.Scene {
   }
 
   public showSimpleDialog(title: string, message: string, onClose: () => void) {
+    this.playDialogOpenSound();
     this.clearOptions();
     this.dialogContainer.setVisible(true);
     this.backgroundDim.setVisible(true);
@@ -220,6 +231,7 @@ export class DialogScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     btnBg.on('pointerdown', () => {
+      this.playOptionSelectSound();
       this.close();
       onClose();
     });
@@ -235,6 +247,7 @@ export class DialogScene extends Phaser.Scene {
     options: string[],
     onSelectOption: (index: number) => void
   ) {
+    this.playDialogOpenSound();
     this.clearOptions();
     this.dialogContainer.setVisible(true);
     this.backgroundDim.setVisible(true);
@@ -279,6 +292,7 @@ export class DialogScene extends Phaser.Scene {
       }).setOrigin(0, 0.5);
 
       btnBg.on('pointerdown', () => {
+        this.playOptionSelectSound();
         this.close();
         onSelectOption(index);
       });
@@ -290,6 +304,7 @@ export class DialogScene extends Phaser.Scene {
   }
 
   public showEmotionQuestion(onSelectRating: (rating: number) => void) {
+    this.playDialogOpenSound();
     this.stopTypewriter();
     this.isTyping = false;
     this.decisionButtonsPending = false;
@@ -328,6 +343,7 @@ export class DialogScene extends Phaser.Scene {
       }).setOrigin(0.5);
 
       btnBg.on('pointerdown', () => {
+        this.playOptionSelectSound();
         this.close();
         onSelectRating(r.score);
       });
