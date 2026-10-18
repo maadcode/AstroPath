@@ -14,6 +14,15 @@ export class DialogScene extends Phaser.Scene {
   private eKey!: Phaser.Input.Keyboard.Key;
   private openedAt = 0;
   private readonly CLOSE_DEBOUNCE_MS = 250;
+  private readonly SKIP_DEBOUNCE_MS = 150;
+
+  // Typewriter effect state
+  private readonly TYPEWRITER_DELAY_MS = 40; // 30-50ms por carácter
+  private currentFullMessage = '';
+  private displayedCharCount = 0;
+  private isTyping = false;
+  private typewriterTimer: Phaser.Time.TimerEvent | null = null;
+  private decisionButtonsPending = false;
 
   constructor() {
     super('DialogScene');
@@ -40,6 +49,7 @@ export class DialogScene extends Phaser.Scene {
     // Panel estilizado futurista
     this.panelBg = this.add.rectangle(0, 0, Math.min(width * 0.9, 720), Math.min(height * 0.85, 480), 0x0f172a, 0.98);
     this.panelBg.setStrokeStyle(2, 0x38bdf8);
+    this.panelBg.setInteractive();
 
     this.titleText = this.add.text(0, -this.panelBg.height / 2 + 25, '', {
       fontSize: '20px',
@@ -53,17 +63,57 @@ export class DialogScene extends Phaser.Scene {
       color: '#f8fafc',
       fontFamily: 'sans-serif',
       wordWrap: { width: this.panelBg.width - 60 },
+      fixedWidth: this.panelBg.width - 60,
       align: 'left',
       lineSpacing: 6
     }).setOrigin(0.5, 0);
 
+    // Compatibilidad para inspección de texto completo
+    Object.defineProperty(this.messageText, 'text', {
+      get: () => this.currentFullMessage || (this.messageText as any)._text,
+      set: (val: string) => {
+        this.messageText.setText(val);
+      },
+      configurable: true
+    });
+
     this.dialogContainer.add([this.panelBg, this.titleText, this.messageText]);
     this.dialogContainer.setVisible(false);
     this.backgroundDim.setVisible(false);
+
+    // Saltar typewriter con clic en cualquier parte de la escena
+    this.input.on('pointerdown', () => {
+      if (
+        this.dialogContainer.visible &&
+        this.isTyping &&
+        this.time.now - this.openedAt >= this.SKIP_DEBOUNCE_MS
+      ) {
+        this.finishTypewriter();
+      }
+    });
   }
 
   update() {
-    if (this.activeCloseCallback && this.dialogContainer.visible) {
+    if (!this.dialogContainer.visible) {
+      return;
+    }
+
+    // Saltar typewriter al presionar Espacio o Enter (respetando debounce de apertura)
+    if (this.isTyping) {
+      if (this.time.now - this.openedAt >= this.SKIP_DEBOUNCE_MS) {
+        if (
+          Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
+          Phaser.Input.Keyboard.JustDown(this.enterKey)
+        ) {
+          this.finishTypewriter();
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    if (this.activeCloseCallback) {
       // Evitar que la misma pulsación que abrió el diálogo lo cierre inmediatamente
       if (this.time.now - this.openedAt < this.CLOSE_DEBOUNCE_MS) {
         return;
@@ -82,6 +132,67 @@ export class DialogScene extends Phaser.Scene {
     }
   }
 
+  private startTypewriter(message: string, isDecision = false) {
+    this.stopTypewriter();
+    this.currentFullMessage = message;
+    this.displayedCharCount = 0;
+    this.isTyping = true;
+    this.decisionButtonsPending = isDecision;
+
+    this.messageText.setText('');
+
+    if (!message || message.length === 0) {
+      this.finishTypewriter();
+      return;
+    }
+
+    this.typewriterTimer = this.time.addEvent({
+      delay: this.TYPEWRITER_DELAY_MS,
+      callback: () => {
+        this.displayedCharCount++;
+        const partial = this.currentFullMessage.slice(0, this.displayedCharCount);
+        this.messageText.setText(partial);
+
+        if (this.displayedCharCount >= this.currentFullMessage.length) {
+          this.finishTypewriter();
+        }
+      },
+      loop: true
+    });
+  }
+
+  public finishTypewriter() {
+    this.stopTypewriter();
+    this.isTyping = false;
+    this.displayedCharCount = this.currentFullMessage.length;
+    this.messageText.setText(this.currentFullMessage);
+
+    // Si había botones de decisión pendientes, mostrarlos ahora
+    if (this.decisionButtonsPending) {
+      this.decisionButtonsPending = false;
+      this.optionButtons.forEach(btn => btn.setVisible(true));
+    }
+  }
+
+  private stopTypewriter() {
+    if (this.typewriterTimer) {
+      this.typewriterTimer.remove();
+      this.typewriterTimer = null;
+    }
+  }
+
+  public isTypewriterActive(): boolean {
+    return this.isTyping;
+  }
+
+  public getDisplayedText(): string {
+    return (this.messageText as any)._text || '';
+  }
+
+  public completeTypewriter(): void {
+    this.finishTypewriter();
+  }
+
   public showSimpleDialog(title: string, message: string, onClose: () => void) {
     this.clearOptions();
     this.dialogContainer.setVisible(true);
@@ -89,8 +200,13 @@ export class DialogScene extends Phaser.Scene {
     this.activeCloseCallback = onClose;
     this.openedAt = this.time.now;
 
+    if (this.spaceKey) this.spaceKey.reset();
+    if (this.enterKey) this.enterKey.reset();
+    if (this.escKey) this.escKey.reset();
+    if (this.eKey) this.eKey.reset();
+
     this.titleText.setText(title);
-    this.messageText.setText(message);
+    this.startTypewriter(message, false);
 
     // Botón Continuar / Entendido (con pista de teclas)
     const btnContainer = this.add.container(0, this.panelBg.height / 2 - 35);
@@ -122,9 +238,16 @@ export class DialogScene extends Phaser.Scene {
     this.clearOptions();
     this.dialogContainer.setVisible(true);
     this.backgroundDim.setVisible(true);
+    this.activeCloseCallback = null;
+    this.openedAt = this.time.now;
+
+    if (this.spaceKey) this.spaceKey.reset();
+    if (this.enterKey) this.enterKey.reset();
+    if (this.escKey) this.escKey.reset();
+    if (this.eKey) this.eKey.reset();
 
     this.titleText.setText(title);
-    this.messageText.setText(message);
+    this.startTypewriter(message, true);
 
     const startY = -40;
     const btnHeight = 44;
@@ -133,6 +256,8 @@ export class DialogScene extends Phaser.Scene {
     options.forEach((optText, index) => {
       const y = startY + (index * (btnHeight + spacing));
       const btnContainer = this.add.container(0, y);
+      // Los botones de decisión solo aparecen cuando el texto terminó de mostrarse
+      btnContainer.setVisible(false);
       
       const btnBg = this.add.rectangle(0, 0, this.panelBg.width - 50, btnHeight, 0x1e293b).setInteractive({ useHandCursor: true });
       btnBg.setStrokeStyle(1, 0x475569);
@@ -165,12 +290,16 @@ export class DialogScene extends Phaser.Scene {
   }
 
   public showEmotionQuestion(onSelectRating: (rating: number) => void) {
+    this.stopTypewriter();
+    this.isTyping = false;
+    this.decisionButtonsPending = false;
     this.clearOptions();
     this.dialogContainer.setVisible(true);
     this.backgroundDim.setVisible(true);
 
     this.titleText.setText('¡Estación Completada!');
-    this.messageText.setText('¿Qué tanto te gustó o llamó la atención resolver este tipo de situación?');
+    this.currentFullMessage = '¿Qué tanto te gustó o llamó la atención resolver este tipo de situación?';
+    this.messageText.setText(this.currentFullMessage);
 
     const ratings = [
       { score: 1, label: '😕 Nada' },
@@ -219,9 +348,13 @@ export class DialogScene extends Phaser.Scene {
   }
 
   private close() {
+    this.stopTypewriter();
+    this.isTyping = false;
+    this.decisionButtonsPending = false;
     this.activeCloseCallback = null;
     this.clearOptions();
     this.dialogContainer.setVisible(false);
     this.backgroundDim.setVisible(false);
   }
 }
+
