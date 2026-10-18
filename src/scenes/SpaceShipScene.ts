@@ -484,10 +484,11 @@ export class SpaceShipScene extends Phaser.Scene {
                 npc.indicator.setTexture('check_bubble');
                 this.endInteraction();
                 uiScene.updateHUD();
+                uiScene.showCompletionToast(station.name);
 
                 // Si terminó las 5 estaciones, abrir informe final
                 if (this.gameState.isGameComplete()) {
-                  this.time.delayedCall(1000, () => {
+                  this.time.delayedCall(3000, () => {
                     this.scene.stop('UIScene');
                     this.scene.start('ReportScene');
                   });

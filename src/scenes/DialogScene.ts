@@ -113,6 +113,9 @@ export class DialogScene extends Phaser.Scene {
 
     // Saltar typewriter al presionar Espacio o Enter
     if (this.isTyping) {
+      if (this.time.now - this.openedAt < this.SKIP_DEBOUNCE_MS) {
+        return;
+      }
       if (
         Phaser.Input.Keyboard.JustDown(this.spaceKey) ||
         Phaser.Input.Keyboard.JustDown(this.enterKey)

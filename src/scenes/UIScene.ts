@@ -16,6 +16,9 @@ export class UIScene extends Phaser.Scene {
   public virtualJoystick = { x: 0, y: 0 };
   public isActionButtonPressed = false;
 
+  private activeToastContainer: Phaser.GameObjects.Container | null = null;
+  private activeToastTimer: Phaser.Time.TimerEvent | null = null;
+
   constructor() {
     super('UIScene');
   }
@@ -134,6 +137,72 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
+  public showCompletionToast(stationName: string) {
+    if (this.activeToastTimer) {
+      this.activeToastTimer.remove();
+      this.activeToastTimer = null;
+    }
+
+    if (this.activeToastContainer) {
+      this.tweens.killTweensOf(this.activeToastContainer);
+      this.activeToastContainer.destroy();
+      this.activeToastContainer = null;
+    }
+
+    const { width } = this.scale;
+    const toastContainer = this.add.container(width / 2, -60);
+    toastContainer.setDepth(100);
+
+    const message = `✅ ${stationName}: ¡Misión cumplida!`;
+    const toastText = this.add.text(0, 0, message, {
+      fontSize: '15px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    const bannerWidth = Math.max(340, toastText.width + 48);
+    const bannerHeight = 44;
+
+    const shadow = this.add.rectangle(0, 3, bannerWidth, bannerHeight, 0x000000, 0.4);
+    const bg = this.add.rectangle(0, 0, bannerWidth, bannerHeight, 0x064e3b, 0.95);
+    bg.setStrokeStyle(2, 0x10b981);
+
+    toastContainer.add([shadow, bg, toastText]);
+    toastContainer.setAlpha(0);
+
+    this.activeToastContainer = toastContainer;
+
+    // Animación de entrada suave desde arriba
+    this.tweens.add({
+      targets: toastContainer,
+      y: 80,
+      alpha: 1,
+      duration: 400,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Permanece visible durante 2.5s
+        this.activeToastTimer = this.time.delayedCall(2500, () => {
+          if (!toastContainer.active) return;
+          // Animación de salida hacia arriba con tween
+          this.tweens.add({
+            targets: toastContainer,
+            y: -60,
+            alpha: 0,
+            duration: 350,
+            ease: 'Cubic.easeIn',
+            onComplete: () => {
+              toastContainer.destroy();
+              if (this.activeToastContainer === toastContainer) {
+                this.activeToastContainer = null;
+              }
+            }
+          });
+        });
+      }
+    });
+  }
+
   private createMobileTouchControls(width: number, height: number) {
     this.mobileControlsContainer = this.add.container(0, 0);
 
@@ -213,6 +282,9 @@ export class UIScene extends Phaser.Scene {
     }
     if (this.progressText) {
       this.progressText.setPosition(gameSize.width - 125, 16);
+    }
+    if (this.activeToastContainer && this.activeToastContainer.active) {
+      this.activeToastContainer.setX(gameSize.width / 2);
     }
     this.createMuteButton(gameSize.width);
 
