@@ -26,6 +26,7 @@ export class SpaceShipScene extends Phaser.Scene {
   private isInteracting = false;
   private lastInteractionEndTime = 0;
   private readonly INTERACTION_COOLDOWN_MS = 350;
+  private currentDirection: 'down' | 'up' | 'left' | 'right' = 'down';
 
   private footstepsSound?: Phaser.Sound.BaseSound;
 
@@ -53,13 +54,14 @@ export class SpaceShipScene extends Phaser.Scene {
     // 2. Crear al Jugador en el pasillo central del mapa (tile 33, 9)
     const startX = 1072;
     const startY = 304;
-    this.player = this.physics.add.sprite(startX, startY, 'player_sprite');
+    this.player = this.physics.add.sprite(startX, startY, 'player_down_idle');
     this.player.setCollideWorldBounds(true);
     this.player.setScale(0.95);
     if (this.player.body) {
       this.player.body.setSize(16, 16);
       this.player.body.setOffset(8, 12);
     }
+    this.player.play('player_idle_down');
 
     // 3. Activar colisión sólida del jugador contra las paredes del mapa
     if (this.wallsLayer) {
@@ -285,6 +287,7 @@ export class SpaceShipScene extends Phaser.Scene {
   private handlePlayerMovement() {
     if (this.isInteracting) {
       this.player.setVelocity(0, 0);
+      this.player.play(`player_idle_${this.currentDirection}`, true);
       if (this.footstepsSound && this.footstepsSound.isPlaying) {
         this.footstepsSound.stop();
       }
@@ -308,21 +311,32 @@ export class SpaceShipScene extends Phaser.Scene {
       if (uiScene.virtualJoystick.y !== 0) vy = uiScene.virtualJoystick.y;
     }
 
-    // Normalizar vector para evitar velocidad diagonal extra
-    if (vx !== 0 && vy !== 0) {
+    // Normalizar vector para evitar velocidad diagonal extra en teclado
+    if (vx !== 0 && vy !== 0 && Math.abs(vx) === 1 && Math.abs(vy) === 1) {
       vx *= 0.7071;
       vy *= 0.7071;
     }
 
     this.player.setVelocity(vx * speed, vy * speed);
 
-    // Control de audio de pasos metálicos suaves
-    const isMoving = (vx !== 0 || vy !== 0);
+    const isMoving = Math.abs(vx) > 0.05 || Math.abs(vy) > 0.05;
     if (isMoving) {
+      // Determinar dirección predominante según vector de velocidad
+      if (Math.abs(vx) > Math.abs(vy)) {
+        this.currentDirection = vx < 0 ? 'left' : 'right';
+      } else {
+        this.currentDirection = vy < 0 ? 'up' : 'down';
+      }
+
+      this.player.play(`player_walk_${this.currentDirection}`, true);
+
+      // Control de audio de pasos metálicos suaves
       if (this.footstepsSound && !this.footstepsSound.isPlaying) {
         this.footstepsSound.play();
       }
     } else {
+      this.player.play(`player_idle_${this.currentDirection}`, true);
+
       if (this.footstepsSound && this.footstepsSound.isPlaying) {
         this.footstepsSound.stop();
       }
@@ -371,6 +385,8 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private triggerInteraction(npc: InteractiveNPC) {
     this.isInteracting = true;
+    this.player.setVelocity(0, 0);
+    this.player.play(`player_idle_${this.currentDirection}`, true);
     if (this.footstepsSound && this.footstepsSound.isPlaying) {
       this.footstepsSound.stop();
     }
