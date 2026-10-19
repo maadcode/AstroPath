@@ -175,45 +175,95 @@ export class SecurityMinigameScene extends Phaser.Scene {
 
   private setupChutesAndSensors() {
     const bottomY = this.panelY + this.panelHeight / 2 - 80;
-    const leftX = this.panelX - 230;
-    const rightX = this.panelX + 230;
+    const minX = this.panelX - this.panelWidth / 2 + 20;
+    const maxX = this.panelX + this.panelWidth / 2 - 20;
 
-    // Cuarentena (Izquierda)
-    const qZone = this.add.rectangle(leftX, bottomY, 200, 64, 0x3f1d1d, 0.75);
+    // Paredes deflectoras laterales exteriores para evitar que las pelotas queden en los rincones
+    const outerWallLeft = this.matter.add.rectangle(minX + 35, bottomY - 35, 110, 14, {
+      isStatic: true,
+      angle: -0.55,
+      restitution: 0.5,
+      friction: 0.02
+    });
+    const outerWallRight = this.matter.add.rectangle(maxX - 35, bottomY - 35, 110, 14, {
+      isStatic: true,
+      angle: 0.55,
+      restitution: 0.5,
+      friction: 0.02
+    });
+
+    [outerWallLeft, outerWallRight].forEach(w => {
+      const g = this.add.rectangle(w.position.x, w.position.y, 110, 14, 0x1e293b);
+      g.setStrokeStyle(1, 0x475569);
+      g.setRotation(w.angle);
+    });
+
+    // Zona Cuarentena (Izquierda): cubre desde minX hasta panelX - 40
+    const qWidth = (this.panelX - 40) - minX;
+    const qCenterX = minX + qWidth / 2;
+    const qZone = this.add.rectangle(qCenterX, bottomY, qWidth - 10, 64, 0x3f1d1d, 0.75);
     qZone.setStrokeStyle(2, 0xef4444);
-    this.add.text(leftX, bottomY - 14, '☣ CUARENTENA', { fontSize: '12px', color: '#fca5a5', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(leftX, bottomY + 10, 'Aislamiento de Amenazas', { fontSize: '10px', color: '#f87171' }).setOrigin(0.5);
+    this.add.text(qCenterX, bottomY - 14, '☣ CUARENTENA', {
+      fontSize: '12px',
+      color: '#fca5a5',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+    this.add.text(qCenterX, bottomY + 10, 'Aislamiento de Amenazas', {
+      fontSize: '10px',
+      color: '#f87171',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
-    this.matter.add.rectangle(leftX, bottomY, 190, 56, {
+    this.matter.add.rectangle(qCenterX, bottomY, qWidth, 80, {
       isStatic: true,
       isSensor: true,
       label: 'quarantine_sensor'
     });
 
-    // Bóveda Segura (Derecha)
-    const vZone = this.add.rectangle(rightX, bottomY, 200, 64, 0x1e3a5f, 0.75);
+    // Zona Bóveda Segura (Derecha): cubre desde panelX + 40 hasta maxX
+    const vWidth = maxX - (this.panelX + 40);
+    const vCenterX = (this.panelX + 40) + vWidth / 2;
+    const vZone = this.add.rectangle(vCenterX, bottomY, vWidth - 10, 64, 0x1e3a5f, 0.75);
     vZone.setStrokeStyle(2, 0x38bdf8);
-    this.add.text(rightX, bottomY - 14, '🔒 BÓVEDA SEGURA', { fontSize: '12px', color: '#7dd3fc', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(rightX, bottomY + 10, 'Recepción de Datos Limpios', { fontSize: '10px', color: '#38bdf8' }).setOrigin(0.5);
+    this.add.text(vCenterX, bottomY - 14, '🔒 BÓVEDA SEGURA', {
+      fontSize: '12px',
+      color: '#7dd3fc',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+    this.add.text(vCenterX, bottomY + 10, 'Recepción de Datos Limpios', {
+      fontSize: '10px',
+      color: '#38bdf8',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
-    this.matter.add.rectangle(rightX, bottomY, 190, 56, {
+    this.matter.add.rectangle(vCenterX, bottomY, vWidth, 80, {
       isStatic: true,
       isSensor: true,
       label: 'vault_sensor'
     });
+
+    // Colector inferior central de seguridad (en caso de caer justo en el eje central)
+    const floorDrain = this.matter.add.rectangle(this.panelX, bottomY, 80, 80, {
+      isStatic: true,
+      isSensor: true,
+      label: 'floor_drain'
+    });
+    this.add.rectangle(floorDrain.position.x, floorDrain.position.y, 80, 64, 0x1e1e2e, 0.5);
 
     // Embudo superior canalizador (embudo cerrado hacia el centro)
     const funnelLeft = this.matter.add.rectangle(this.panelX - 110, this.panelY - 100, 160, 14, {
       isStatic: true,
       angle: 0.45,
       restitution: 0.4,
-      friction: 0.05
+      friction: 0.02
     });
     const funnelRight = this.matter.add.rectangle(this.panelX + 110, this.panelY - 100, 160, 14, {
       isStatic: true,
       angle: -0.45,
       restitution: 0.4,
-      friction: 0.05
+      friction: 0.02
     });
 
     [funnelLeft, funnelRight].forEach(f => {
@@ -228,14 +278,14 @@ export class SecurityMinigameScene extends Phaser.Scene {
       isStatic: true,
       angle: 0.35,
       restitution: 0.3,
-      friction: 0.05
+      friction: 0.02
     });
     // Rampa derecha hacia Bóveda
     const rampRight = this.matter.add.rectangle(this.panelX + 180, this.panelY + 110, 140, 12, {
       isStatic: true,
       angle: -0.35,
       restitution: 0.3,
-      friction: 0.05
+      friction: 0.02
     });
 
     [rampLeft, rampRight].forEach(r => {
@@ -243,14 +293,6 @@ export class SecurityMinigameScene extends Phaser.Scene {
       g.setStrokeStyle(1, 0x475569);
       g.setRotation(r.angle);
     });
-
-    // Colector inferior central de seguridad (si cae fuera, lo clasifica por defecto para evitar estancamiento)
-    const floorDrain = this.matter.add.rectangle(this.panelX, bottomY + 20, 140, 20, {
-      isStatic: true,
-      isSensor: true,
-      label: 'floor_drain'
-    });
-    this.add.rectangle(floorDrain.position.x, floorDrain.position.y, 140, 10, 0x1e1e2e, 0.5);
   }
 
   private setupCentralDeflector() {
@@ -449,7 +491,14 @@ export class SecurityMinigameScene extends Phaser.Scene {
       this.spawnPacket(isThreat, isAmbiguous);
       packetIndex++;
 
-      this.spawnTimer = this.time.delayedCall(delay, scheduleNextPacket);
+      if (packetIndex < this.totalPacketsToSpawn) {
+        this.spawnTimer = this.time.delayedCall(delay, scheduleNextPacket);
+      } else {
+        // Todos los paquetes fueron engendrados; temporizador de seguridad para finalizar si no hay pelotas
+        this.time.delayedCall(4500, () => {
+          this.forceFinishIfPending();
+        });
+      }
     };
 
     this.spawnTimer = this.time.delayedCall(1000, scheduleNextPacket);
@@ -683,6 +732,45 @@ export class SecurityMinigameScene extends Phaser.Scene {
         }
       }
     }
+
+    // 5. Watchdog de resolución: si un paquete alcanza la zona inferior o tarda más de 6.5s, resolverlo de inmediato
+    const now = Date.now();
+    const bottomThreshold = this.panelY + this.panelHeight / 2 - 120; // Y ~ 470
+
+    for (const p of this.packets) {
+      if (!p.resolved) {
+        if (p.body.position.y >= bottomThreshold || (now - p.spawnTime > 6500)) {
+          if (p.body.position.x < this.panelX) {
+            this.handleSensorTrigger({ label: 'quarantine_sensor' } as any, p.body);
+          } else {
+            this.handleSensorTrigger({ label: 'vault_sensor' } as any, p.body);
+          }
+        }
+      }
+    }
+
+    // 6. Comprobación reactiva de fin de partida: si se engendraron todos y no quedan pelotas activas
+    if (this.spawnedCount >= this.totalPacketsToSpawn) {
+      const activePackets = this.packets.filter(p => !p.resolved);
+      if (activePackets.length === 0 && (!this.completedModal || !this.completedModal.visible)) {
+        this.triggerVictory();
+      }
+    }
+  }
+
+  private forceFinishIfPending() {
+    if (!this.completedModal || !this.completedModal.visible) {
+      for (const p of this.packets) {
+        if (!p.resolved) {
+          if (p.body.position.x < this.panelX) {
+            this.handleSensorTrigger({ label: 'quarantine_sensor' } as any, p.body);
+          } else {
+            this.handleSensorTrigger({ label: 'vault_sensor' } as any, p.body);
+          }
+        }
+      }
+      this.triggerVictory();
+    }
   }
 
   private revealPacketIdentity(packet: PacketItem) {
@@ -710,6 +798,7 @@ export class SecurityMinigameScene extends Phaser.Scene {
   }
 
   private triggerVictory() {
+    if (this.completedModal && this.completedModal.visible) return;
     const elapsedSeconds = Math.round((Date.now() - this.startTime) / 1000);
 
     const threatRate = this.totalThreats > 0 ? (this.threatsBlocked / this.totalThreats) : 1;
