@@ -110,7 +110,7 @@ export class ReportScene extends Phaser.Scene {
     branches.sort((a, b) => b.percent - a.percent);
 
     const barWidth = 410;
-    const barHeight = 14;
+    const barHeight = 10;
     let currentY = startY;
 
     this.add.text(centerX - barWidth / 2, currentY - 5, 'DISTRIBUCIÓN VOCACIONAL (% AFINIDAD)', {
@@ -120,12 +120,13 @@ export class ReportScene extends Phaser.Scene {
       fontFamily: 'sans-serif'
     });
 
-    currentY += 24;
+    currentY += 26;
 
     branches.forEach((b, index) => {
       const isTop = index === 0;
       const titlePrefix = isTop ? '⭐ TOP: ' : '';
 
+      // Título de la rama a la izquierda
       this.add.text(centerX - barWidth / 2, currentY, `${titlePrefix}${b.name}`, {
         fontSize: isTop ? '13px' : '12px',
         color: b.color,
@@ -133,6 +134,7 @@ export class ReportScene extends Phaser.Scene {
         fontFamily: 'sans-serif'
       });
 
+      // Porcentaje a la derecha
       this.add.text(centerX + barWidth / 2, currentY, `${b.percent}%`, {
         fontSize: '13px',
         color: '#ffffff',
@@ -140,13 +142,14 @@ export class ReportScene extends Phaser.Scene {
         fontFamily: 'sans-serif'
       }).setOrigin(1, 0);
 
-      // Barra de fondo
-      const bgBar = this.add.rectangle(centerX, currentY + 18, barWidth, barHeight, 0x1e293b).setOrigin(0.5);
+      // Barra de fondo (posicionada limpiamente debajo del título)
+      const barY = currentY + 24;
+      const bgBar = this.add.rectangle(centerX, barY, barWidth, barHeight, 0x1e293b).setOrigin(0.5);
       bgBar.setStrokeStyle(1, 0x334155);
 
       // Barra de progreso animada
       const fillW = Math.max(8, (b.percent / 100) * barWidth);
-      const fillBar = this.add.rectangle(centerX - barWidth / 2, currentY + 18, 0, barHeight, b.colorHex).setOrigin(0, 0.5);
+      const fillBar = this.add.rectangle(centerX - barWidth / 2, barY, 0, barHeight, b.colorHex).setOrigin(0, 0.5);
 
       this.tweens.add({
         targets: fillBar,
@@ -155,13 +158,14 @@ export class ReportScene extends Phaser.Scene {
         ease: 'Cubic.easeOut'
       });
 
-      this.add.text(centerX - barWidth / 2, currentY + 30, b.desc, {
+      // Descripción debajo de la barra de progreso
+      this.add.text(centerX - barWidth / 2, currentY + 36, b.desc, {
         fontSize: '10px',
-        color: '#64748b',
+        color: '#94a3b8',
         fontFamily: 'sans-serif'
       });
 
-      currentY += 66;
+      currentY += 76;
     });
   }
 
