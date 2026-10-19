@@ -72,13 +72,15 @@ export class DataMinigameScene extends Phaser.Scene {
   // Gráficos y UI
   private graphBg!: Phaser.GameObjects.Rectangle;
   private graphGraphics!: Phaser.GameObjects.Graphics;
-  private graphX = 330;
-  private graphY = 320;
+  private graphX = 310;
+  private graphY = 310;
   private graphWidth = 420;
-  private graphHeight = 270;
+  private graphHeight = 260;
+  private playerLegendLine!: Phaser.GameObjects.Rectangle;
 
   // Textos del HUD
   private speciesTitleText!: Phaser.GameObjects.Text;
+  private speciesScientificText!: Phaser.GameObjects.Text;
   private speciesDescText!: Phaser.GameObjects.Text;
   private cycleIndicatorText!: Phaser.GameObjects.Text;
   private correlationText!: Phaser.GameObjects.Text;
@@ -185,18 +187,26 @@ export class DataMinigameScene extends Phaser.Scene {
     }).setOrigin(1, 0);
 
     // Leyenda de curvas
-    const legendY = this.graphY + this.graphHeight / 2 + 16;
+    const legendY = this.graphY + this.graphHeight / 2 + 18;
     
     // Objetivo
     const l1 = this.add.rectangle(this.graphX - 140, legendY, 20, 3, 0xfacc15);
-    this.add.text(l1.x + 16, legendY, 'Patrón Objetivo (Sensor)', { fontSize: '10.5px', color: '#facc15' }).setOrigin(0, 0.5);
+    this.add.text(l1.x + 16, legendY, 'Patrón Objetivo (Sensor)', {
+      fontSize: '10.5px',
+      color: '#facc15',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0, 0.5);
 
-    // Jugador
-    const l2 = this.add.rectangle(this.graphX + 40, legendY, 20, 3, 0x38bdf8);
-    this.add.text(l2.x + 16, legendY, 'Curva Calibrada (Actual)', { fontSize: '10.5px', color: '#38bdf8' }).setOrigin(0, 0.5);
+    // Jugador (la línea legendaria se actualizará con curveColor)
+    this.playerLegendLine = this.add.rectangle(this.graphX + 40, legendY, 20, 3, 0x38bdf8);
+    this.add.text(this.playerLegendLine.x + 16, legendY, 'Curva Calibrada (Actual)', {
+      fontSize: '10.5px',
+      color: '#38bdf8',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0, 0.5);
 
     // HUD de correlación y error en tiempo real
-    const metricY = this.graphY + this.graphHeight / 2 + 42;
+    const metricY = this.graphY + this.graphHeight / 2 + 45;
     this.correlationText = this.add.text(this.graphX - 160, metricY, 'Similitud R²: 0.0%', {
       fontSize: '13px',
       color: '#facc15',
@@ -213,38 +223,50 @@ export class DataMinigameScene extends Phaser.Scene {
   }
 
   private setupControlSliders() {
-    const startX = this.panelX + 130;
-    const startY = this.panelY - 110;
+    const rightCenterX = this.panelX + 205; // 717
+    const rightCardWidth = 350;
+    const cardLeft = rightCenterX - rightCardWidth / 2 + 16; // 558
 
     // Tarjeta informativa de la especie
-    const cardBg = this.add.rectangle(startX + 105, startY + 15, 255, 75, 0x1e1b4b, 0.6);
-    cardBg.setStrokeStyle(1, 0x6366f1);
+    const cardBg = this.add.rectangle(rightCenterX, 198, rightCardWidth, 106, 0x0b1120, 0.95);
+    cardBg.setStrokeStyle(1.5, 0x6366f1);
 
-    this.cycleIndicatorText = this.add.text(startX - 10, startY - 12, 'CICLO 1 / 3', {
+    this.cycleIndicatorText = this.add.text(cardLeft, 154, 'CICLO 1 / 3', {
       fontSize: '11px',
       color: '#a5b4fc',
-      fontStyle: 'bold'
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
     });
 
-    this.speciesTitleText = this.add.text(startX - 10, startY + 6, 'Algassus Primus', {
-      fontSize: '14px',
+    this.speciesTitleText = this.add.text(cardLeft, 172, 'Algassus Primus', {
+      fontSize: '16px',
       color: '#ffffff',
-      fontStyle: 'bold'
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
     });
 
-    this.speciesDescText = this.add.text(startX - 10, startY + 26, 'Bio-filtro de Oxígeno', {
-      fontSize: '10px',
+    this.speciesScientificText = this.add.text(cardLeft, 194, 'Bio-filtro de Oxígeno', {
+      fontSize: '11px',
+      color: '#38bdf8',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    });
+
+    this.speciesDescText = this.add.text(cardLeft, 212, 'Crecimiento unimodal...', {
+      fontSize: '10.5px',
       color: '#cbd5e1',
-      wordWrap: { width: 235 }
+      fontFamily: 'sans-serif',
+      wordWrap: { width: rightCardWidth - 32 },
+      lineSpacing: 2
     });
 
     // Controles de Deslizadores (Temperatura, Humedad, Luz)
-    const sliderWidth = 140;
-    const sliderBaseY = startY + 95;
+    const trackWidth = 200;
+    const sliderTrackX = rightCenterX - 85;
 
     // 1. Slider Temperatura
     this.sliderTController = this.setupSingleSlider(
-      startX, sliderBaseY, sliderWidth,
+      sliderTrackX, 282, trackWidth,
       '🌡️ Temperatura', '#f87171', 10, 45, '°C',
       this.paramT,
       (val) => { this.paramT = val; this.onParameterChanged(); }
@@ -252,7 +274,7 @@ export class DataMinigameScene extends Phaser.Scene {
 
     // 2. Slider Humedad
     this.sliderHController = this.setupSingleSlider(
-      startX, sliderBaseY + 58, sliderWidth,
+      sliderTrackX, 344, trackWidth,
       '💧 Humedad Relativa', '#60a5fa', 20, 90, '%',
       this.paramH,
       (val) => { this.paramH = val; this.onParameterChanged(); }
@@ -260,64 +282,79 @@ export class DataMinigameScene extends Phaser.Scene {
 
     // 3. Slider Luz
     this.sliderLController = this.setupSingleSlider(
-      startX, sliderBaseY + 116, sliderWidth,
+      sliderTrackX, 406, trackWidth,
       '☀️ Intensidad Lumínica', '#fbbf24', 10, 100, ' Klx',
       this.paramL,
       (val) => { this.paramL = val; this.onParameterChanged(); }
     );
 
     // Botón Confirmar Calibración
-    const btnY = startY + 185;
-    this.confirmBtn = this.add.rectangle(startX + 105, btnY, 255, 38, 0x4c1d95).setInteractive({ useHandCursor: true });
-    this.confirmBtn.setStrokeStyle(1.5, 0x8b5cf6);
+    const btnY = 472;
+    this.confirmBtn = this.add.rectangle(rightCenterX, btnY, rightCardWidth, 42, 0x312e81).setInteractive({ useHandCursor: true });
+    this.confirmBtn.setStrokeStyle(1.5, 0x6366f1);
 
-    this.confirmBtnText = this.add.text(startX + 105, btnY, 'Confirmar Calibración (Min 82%)', {
-      fontSize: '12px',
-      color: '#e9d5ff',
-      fontStyle: 'bold'
+    this.confirmBtnText = this.add.text(rightCenterX, btnY, 'Confirmar Calibración (Min 82%)', {
+      fontSize: '12.5px',
+      color: '#c7d2fe',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
     }).setOrigin(0.5);
 
     this.confirmBtn.on('pointerdown', () => this.handleConfirmCycle());
   }
 
   private setupSingleSlider(
-    x: number, y: number, width: number,
+    trackX: number, y: number, trackWidth: number,
     label: string, colorHex: string,
     min: number, max: number, unit: string,
     initialVal: number,
     onValueChange: (val: number) => void
   ): { setVal: (val: number) => void } {
-    this.add.text(x - 10, y - 10, label, { fontSize: '11px', color: colorHex, fontStyle: 'bold' });
-
-    const valText = this.add.text(x + width + 55, y + 8, `${Math.round(initialVal)}${unit}`, {
+    this.add.text(trackX - 35, y - 13, label, {
       fontSize: '11.5px',
+      color: colorHex,
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    });
+
+    const valText = this.add.text(trackX + trackWidth + 50, y + 10, `${Math.round(initialVal)}${unit}`, {
+      fontSize: '12px',
       color: '#ffffff',
-      fontStyle: 'bold'
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
     }).setOrigin(0.5);
 
     // Botón Step [-]
-    const btnMinus = this.add.rectangle(x + 2, y + 8, 22, 22, 0x1e293b).setInteractive({ useHandCursor: true });
+    const btnMinus = this.add.rectangle(trackX - 18, y + 10, 24, 24, 0x1e293b).setInteractive({ useHandCursor: true });
     btnMinus.setStrokeStyle(1, 0x475569);
-    this.add.text(btnMinus.x, btnMinus.y, '−', { fontSize: '13px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnMinus.x, btnMinus.y, '−', {
+      fontSize: '14px',
+      color: '#e2e8f0',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     // Track
-    const trackX = x + 24;
-    const trackWidth = width;
-    const trackBg = this.add.rectangle(trackX + trackWidth / 2, y + 8, trackWidth, 6, 0x1e293b);
+    const trackBg = this.add.rectangle(trackX + trackWidth / 2, y + 10, trackWidth, 8, 0x1e293b);
     trackBg.setStrokeStyle(1, 0x334155);
 
-    const fill = this.add.rectangle(trackX, y + 8, 0, 6, Phaser.Display.Color.HexStringToColor(colorHex).color);
+    const fill = this.add.rectangle(trackX, y + 10, 0, 8, Phaser.Display.Color.HexStringToColor(colorHex).color);
     fill.setOrigin(0, 0.5);
 
     // Handle
-    const handle = this.add.circle(trackX, y + 8, 8, 0xffffff);
+    const handle = this.add.circle(trackX, y + 10, 9, 0xffffff);
     handle.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(colorHex).color);
     handle.setInteractive({ useHandCursor: true });
 
     // Botón Step [+]
-    const btnPlus = this.add.rectangle(trackX + trackWidth + 14, y + 8, 22, 22, 0x1e293b).setInteractive({ useHandCursor: true });
+    const btnPlus = this.add.rectangle(trackX + trackWidth + 18, y + 10, 24, 24, 0x1e293b).setInteractive({ useHandCursor: true });
     btnPlus.setStrokeStyle(1, 0x475569);
-    this.add.text(btnPlus.x, btnPlus.y, '+', { fontSize: '13px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnPlus.x, btnPlus.y, '+', {
+      fontSize: '14px',
+      color: '#e2e8f0',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     const updateFromNormalized = (norm: number, isStepButton = false, triggerChange = true) => {
       const clampedNorm = Phaser.Math.Clamp(norm, 0, 1);
@@ -388,7 +425,8 @@ export class DataMinigameScene extends Phaser.Scene {
     const crop = this.speciesList[cycleIdx];
     this.cycleIndicatorText.setText(`CICLO ${crop.id} / 3`);
     this.speciesTitleText.setText(crop.name);
-    this.speciesDescText.setText(`${crop.scientificName}\n${crop.description}`);
+    this.speciesScientificText.setText(crop.scientificName);
+    this.speciesDescText.setText(crop.description);
 
     // Establecer parámetros iniciales alejados del óptimo para exigir calibración
     if (cycleIdx === 0) {
@@ -511,7 +549,7 @@ export class DataMinigameScene extends Phaser.Scene {
       this.graphGraphics.lineBetween(p1.x, p1.y, p2.x, p2.y);
     }
 
-    // 5. Dibujar Curva del Jugador (Línea continua cian con brillo)
+    // 5. Dibujar Curva del Jugador (Línea continua con color dinámico)
     const curveColor = accuracy >= 82 ? 0x22c55e : (accuracy >= 60 ? 0x38bdf8 : 0xec4899);
     this.graphGraphics.lineStyle(3, curveColor, 1);
     this.graphGraphics.beginPath();
@@ -521,6 +559,8 @@ export class DataMinigameScene extends Phaser.Scene {
       else this.graphGraphics.lineTo(pt.x, pt.y);
     }
     this.graphGraphics.strokePath();
+
+    this.playerLegendLine?.setFillStyle(curveColor);
 
     // 6. Actualizar métricas visuales del HUD
     this.correlationText.setText(`Similitud R²: ${accuracy.toFixed(1)}%`);

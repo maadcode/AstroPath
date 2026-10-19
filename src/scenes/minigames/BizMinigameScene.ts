@@ -281,7 +281,7 @@ export class BizMinigameScene extends Phaser.Scene {
     this.add.text(
       this.panelX - this.panelWidth / 2 + 25,
       this.panelY - this.panelHeight / 2 + 40,
-      'Diseña el cronograma semanal en las 2 franjas horarias. Maximiza la satisfacción sin que ningún grupo baje del 50%.',
+      'Diseña el cronograma semanal (presupuesto 100 créditos). Logra que los 3 grupos alcancen al menos un 65% de satisfacción.',
       {
         fontSize: '11px',
         color: '#94a3b8',
