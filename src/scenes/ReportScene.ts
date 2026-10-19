@@ -36,10 +36,10 @@ export class ReportScene extends Phaser.Scene {
     const scores = this.gameState.getPercentageScores();
 
     // 1. Dibujar gráfico y desglose a la izquierda
-    this.drawVocationalBreakdown(width / 2 - 210, 105, scores);
+    this.drawVocationalBreakdown(width / 2 - 225, 105, scores);
 
     // 2. Dibujar panel de métricas de telemetría a la derecha
-    this.drawTelemetryPanel(width / 2 + 250, 105);
+    this.drawTelemetryPanel(width / 2 + 235, 105);
 
     // 3. Botón reiniciar Odisea
     const resetBtn = this.add.rectangle(width / 2, height - 35, 220, 38, 0x0284c7).setInteractive({ useHandCursor: true });
@@ -109,7 +109,7 @@ export class ReportScene extends Phaser.Scene {
 
     branches.sort((a, b) => b.percent - a.percent);
 
-    const barWidth = 440;
+    const barWidth = 410;
     const barHeight = 14;
     let currentY = startY;
 
@@ -166,70 +166,77 @@ export class ReportScene extends Phaser.Scene {
   }
 
   private drawTelemetryPanel(centerX: number, startY: number) {
-    const cardWidth = 380;
-    const cardHeight = 420;
+    const cardWidth = 430;
+    const cardHeight = 435;
 
-    const bg = this.add.rectangle(centerX, startY + cardHeight / 2 - 10, cardWidth, cardHeight, 0x0b1120, 0.9);
+    const bg = this.add.rectangle(centerX, startY + cardHeight / 2 - 10, cardWidth, cardHeight, 0x0b1120, 0.95);
     bg.setStrokeStyle(1.5, 0x1e293b);
 
-    this.add.text(centerX, startY + 5, '📡 TELEMETRÍA Y MÉTRICAS FÍSICAS', {
+    this.add.text(centerX, startY + 6, '📡 TELEMETRÍA Y MÉTRICAS TÉCNICAS', {
       fontSize: '12px',
       color: '#38bdf8',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     }).setOrigin(0.5);
 
-    let curY = startY + 32;
+    let curY = startY + 28;
 
     const stationCards = [
-      { id: 'station_net', name: '🖧 Torre de Antenas: Patch Panel Elástico', color: '#34d399' },
-      { id: 'station_sec', name: '🛡️ Puesto de Vigilancia: Deflector Balístico', color: '#f87171' },
-      { id: 'station_dev', name: '🤖 Bahía de Ensamblaje: Brazo Cinemático', color: '#60a5fa' },
-      { id: 'station_data', name: '📊 Laboratorio de Cultivos: Balanza Bio-Sensorial', color: '#c084fc' },
-      { id: 'station_biz', name: '🤝 Sala Común: Mediación y Consenso', color: '#fbbf24' }
+      { id: 'station_net', name: 'Torre de Antenas', icon: '📡', color: '#34d399' },
+      { id: 'station_sec', name: 'Puesto de Vigilancia', icon: '🛡️', color: '#f87171' },
+      { id: 'station_dev', name: 'Bahía de Ensamblaje', icon: '🤖', color: '#60a5fa' },
+      { id: 'station_data', name: 'Laboratorio de Cultivos', icon: '🌱', color: '#c084fc' },
+      { id: 'station_biz', name: 'Sala Común', icon: '📋', color: '#fbbf24' }
     ];
 
     stationCards.forEach(sc => {
       const station = this.gameState.getStation(sc.id);
       const metrics = station?.minigameMetrics;
 
-      this.add.text(centerX - cardWidth / 2 + 16, curY, sc.name, {
-        fontSize: '11px',
+      // Fondo sutil de fila para separar visualmente cada estación
+      const rowBg = this.add.rectangle(centerX, curY + 22, cardWidth - 20, 48, 0x0f172a, 0.7);
+      rowBg.setStrokeStyle(1, 0x1e293b);
+
+      // Línea 1: Nombre de la estación (Izquierda)
+      this.add.text(centerX - cardWidth / 2 + 18, curY + 4, `${sc.icon} ${sc.name}`, {
+        fontSize: '12px',
         color: sc.color,
         fontStyle: 'bold',
         fontFamily: 'sans-serif'
       });
 
+      // Línea 1: Puntuaciones Primaria y Secundaria (Derecha)
       const scoreText = metrics 
-        ? `Prim: ${metrics.primaryScore}/100  |  Sec (${metrics.secondaryBranch?.toUpperCase()}): ${metrics.secondaryScore}/100` 
+        ? `Prim: ${metrics.primaryScore}%  |  Sec (${metrics.secondaryBranch?.toUpperCase()}): ${metrics.secondaryScore}%` 
         : 'No calibrado';
-      this.add.text(centerX + cardWidth / 2 - 16, curY, scoreText, {
+
+      this.add.text(centerX + cardWidth / 2 - 18, curY + 4, scoreText, {
         fontSize: '10.5px',
         color: '#facc15',
         fontStyle: 'bold',
         fontFamily: 'sans-serif'
       }).setOrigin(1, 0);
 
-      curY += 18;
-
+      // Línea 2: Detalles de métricas (con ancho restringido para evitar desbordes)
       if (metrics && metrics.details) {
         const detailsArr = Object.entries(metrics.details).slice(0, 3);
-        const detailStr = detailsArr.map(([k, v]) => `${k}: ${v}`).join(' • ');
-        this.add.text(centerX - cardWidth / 2 + 20, curY, detailStr, {
+        const detailStr = detailsArr.map(([k, v]) => `${k}: ${v}`).join('  •  ');
+        this.add.text(centerX - cardWidth / 2 + 18, curY + 25, detailStr, {
           fontSize: '9.5px',
           color: '#cbd5e1',
-          fontFamily: 'sans-serif'
+          fontFamily: 'sans-serif',
+          wordWrap: { width: cardWidth - 36 }
         });
       }
 
-      curY += 46;
+      curY += 54;
     });
 
     // Párrafo de recomendación final
-    const recommendationBg = this.add.rectangle(centerX, startY + cardHeight - 45, cardWidth - 30, 50, 0x1e293b, 0.6);
+    const recommendationBg = this.add.rectangle(centerX, startY + cardHeight - 38, cardWidth - 30, 44, 0x1e293b, 0.6);
     recommendationBg.setStrokeStyle(1, 0x334155);
 
-    this.add.text(centerX, startY + cardHeight - 45, '💡 Consejo: Combina tu afinidad técnica primaria con habilidades\nprácticas para potenciar tu rol profesional.', {
+    this.add.text(centerX, startY + cardHeight - 38, '💡 Consejo: Combina tu afinidad técnica primaria con habilidades\nprácticas para potenciar tu rol profesional.', {
       fontSize: '10px',
       color: '#94a3b8',
       align: 'center',
