@@ -112,14 +112,48 @@ export class GameState {
 
       const primaryBranch = stationBranchMap[stationId];
       if (primaryBranch) {
-        // Escalar 0 a 100 a un peso de 0 a 6.0 puntos vocacionales
+        // Escalar 0 a 100 a un peso técnico de hasta 5.0 puntos vocacionales
         const technicalWeight = (finalMetrics.primaryScore / 100) * 5.0;
         this.totalScores[primaryBranch] += Math.round(technicalWeight * enjoymentMultiplier * 10) / 10;
       }
 
       if (finalMetrics.secondaryBranch && finalMetrics.secondaryScore) {
+        // Escalar 0 a 100 a un peso secundario continuo de hasta 2.5 puntos vocacionales
         const secWeight = (finalMetrics.secondaryScore / 100) * 2.5;
         this.totalScores[finalMetrics.secondaryBranch] += Math.round(secWeight * enjoymentMultiplier * 10) / 10;
+      }
+
+      // 3. P_Stealth: Bonificaciones conductuales directas ("Stealth Assessment", Landers 2024)
+      if (finalMetrics.behavioralBonuses) {
+        const bonusKeys: (keyof VocationalScores)[] = ['dev', 'net', 'sec', 'data', 'biz'];
+        for (const bk of bonusKeys) {
+          const bonusVal = finalMetrics.behavioralBonuses[bk];
+          if (bonusVal && bonusVal > 0) {
+            this.totalScores[bk] += Math.round(bonusVal * enjoymentMultiplier * 10) / 10;
+          }
+        }
+      }
+
+      // 4. Criterio P2 del SDD: El tiempo como señal vocacional psicométrica
+      const timeBenchmarks: { [id: string]: { fast: number; deliberate: number } } = {
+        station_dev: { fast: 30, deliberate: 65 },
+        station_net: { fast: 25, deliberate: 55 },
+        station_sec: { fast: 28, deliberate: 60 },
+        station_data: { fast: 26, deliberate: 55 },
+        station_biz: { fast: 40, deliberate: 85 }
+      };
+
+      const bm = timeBenchmarks[stationId];
+      if (bm) {
+        if (elapsedSeconds <= bm.fast) {
+          // Resolución rápida y directa: bonificación a Software / Redes
+          this.totalScores.dev += Math.round(0.8 * enjoymentMultiplier * 10) / 10;
+          this.totalScores.net += Math.round(0.8 * enjoymentMultiplier * 10) / 10;
+        } else if (elapsedSeconds >= bm.deliberate && finalMetrics.primaryScore >= 70) {
+          // Tiempo invertido calmado, reflexivo y exitoso: bonificación a Datos / Gestión
+          this.totalScores.data += Math.round(0.8 * enjoymentMultiplier * 10) / 10;
+          this.totalScores.biz += Math.round(0.8 * enjoymentMultiplier * 10) / 10;
+        }
       }
     }
   }

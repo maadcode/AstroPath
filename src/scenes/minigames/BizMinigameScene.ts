@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { MinigameMetrics } from '../../types/vocational';
+import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
 export interface ActivityCard {
   id: string;
@@ -186,6 +186,11 @@ export class BizMinigameScene extends Phaser.Scene {
   private modalFinishBtn!: Phaser.GameObjects.Rectangle;
   private startTime = 0;
 
+  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
+  private revisionsCount = 0;
+  private invalidApproveClicks = 0;
+  private firstViableTimeSec = 0;
+
   private onCompleteCallback?: (metrics: MinigameMetrics) => void;
   private onCancelCallback?: () => void;
 
@@ -202,6 +207,9 @@ export class BizMinigameScene extends Phaser.Scene {
     this.juvScore = 40;
     this.currentDraggedActivity = null;
     this.sourceSlotForDrag = null;
+    this.revisionsCount = 0;
+    this.invalidApproveClicks = 0;
+    this.firstViableTimeSec = 0;
   }
 
   create() {
@@ -758,6 +766,9 @@ export class BizMinigameScene extends Phaser.Scene {
   }
 
   private assignSlot(slot: CalendarSlot, act: ActivityCard) {
+    if (slot.activityId !== null && slot.activityId !== act.id) {
+      this.revisionsCount++;
+    }
     slot.activityId = act.id;
     slot.bgRect.setFillStyle(act.color, 0.85);
     slot.bgRect.setStrokeStyle(1.5, 0xffffff);
@@ -785,6 +796,9 @@ export class BizMinigameScene extends Phaser.Scene {
   }
 
   private clearSlot(slot: CalendarSlot, recalculate = true) {
+    if (slot.activityId !== null) {
+      this.revisionsCount++;
+    }
     slot.activityId = null;
     slot.bgRect.setFillStyle(0x0f172a);
     slot.bgRect.setStrokeStyle(1, 0x334155);
@@ -942,6 +956,11 @@ export class BizMinigameScene extends Phaser.Scene {
       this.approveBtn.setStrokeStyle(1.5, 0x64748b);
       this.approveBtnText.setColor('#94a3b8');
     } else {
+      // Stealth Assessment: Momento en que se alcanza la primera solución armónica viable
+      if (this.firstViableTimeSec === 0) {
+        this.firstViableTimeSec = Math.max(1, Math.round((Date.now() - this.startTime) / 1000));
+      }
+
       this.statusBannerBg.setFillStyle(0x064e3b, 0.95);
       this.statusBannerBg.setStrokeStyle(1.5, 0x10b981);
       this.statusBannerText.setText(`✅ ¡Pacto de Convivencia Armónico! Todos los grupos superan el 50% (${filledCount}/14 turnos).`);
@@ -960,12 +979,14 @@ export class BizMinigameScene extends Phaser.Scene {
     const juvOk = this.juvScore >= this.MIN_THRESHOLD;
 
     if (filledCount < 10) {
+      this.invalidApproveClicks++;
       this.cameras.main.shake(180, 0.005);
       this.statusBannerText.setText(`⚠️ Planificación incompleta. Asigna al menos 10 turnos antes de aprobar.`);
       return;
     }
 
     if (!famOk || !invOk || !juvOk) {
+      this.invalidApproveClicks++;
       this.cameras.main.shake(200, 0.006);
       return;
     }
@@ -999,20 +1020,38 @@ export class BizMinigameScene extends Phaser.Scene {
     const rawBiz = (avgScore * 0.5) + (balanceIndex * 0.35) + ((filledCount / 14) * 15);
     const primaryBizScore = Math.max(60, Math.min(100, Math.round(rawBiz)));
 
-    // Secundaria: data (análisis de optimización y distribución matemática)
+    // Secundaria: data (análisis de optimización y distribución matemática continua)
     const rawData = (synergyRatio * 50) + (avgScore * 0.5);
     const secondaryDataScore = Math.max(55, Math.min(100, Math.round(rawData)));
+
+    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
+    const uniqueActivities = new Set(this.slots.filter(s => s.activityId !== null).map(s => s.activityId)).size;
+    const behavioralBonuses: Partial<VocationalScores> = {};
+    if (uniqueActivities >= 5) {
+      behavioralBonuses.biz = 0.7; // Pensamiento sistémico y diversidad de soluciones
+    }
+    if (this.revisionsCount >= 5) {
+      behavioralBonuses.data = 0.6; // Perfeccionismo analítico y calibración iterativa
+    } else if (this.revisionsCount <= 2 && this.invalidApproveClicks === 0) {
+      behavioralBonuses.dev = 0.6; // Decisividad directa y claridad ejecutiva
+    }
+    if (this.invalidApproveClicks === 0) {
+      behavioralBonuses.sec = 0.5; // Lectura escrupulosa de restricciones
+    }
 
     const metrics: MinigameMetrics = {
       primaryScore: primaryBizScore,
       secondaryBranch: 'data',
       secondaryScore: secondaryDataScore,
+      behavioralBonuses,
       details: {
         'Satisfacción Familias': `${Math.round(this.famScore)}%`,
         'Satisfacción Investigadores': `${Math.round(this.invScore)}%`,
         'Satisfacción Jóvenes': `${Math.round(this.juvScore)}%`,
         'Consenso Global': `${Math.round(avgScore)}%`,
         'Índice de Equilibrio': `${Math.round(balanceIndex)}%`,
+        'Diversidad Soluciones': `${uniqueActivities}/8 actividades`,
+        'Revisiones / Ajustes': `${this.revisionsCount}`,
         'Franjas Planificadas': `${filledCount}/14`,
         'Tiempo de Negociación': `${elapsedSeconds} seg`
       },

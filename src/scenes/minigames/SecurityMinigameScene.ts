@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { MinigameMetrics } from '../../types/vocational';
+import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
 interface PacketItem {
   body: MatterJS.BodyType;
@@ -37,6 +37,11 @@ export class SecurityMinigameScene extends Phaser.Scene {
   private shieldIntegrity = 100;
   private startTime = 0;
 
+  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
+  private maxStreak = 0;
+  private currentStreak = 0;
+  private gateAdjustmentsCount = 0;
+
   // UI
   private threatsText!: Phaser.GameObjects.Text;
   private cleanText!: Phaser.GameObjects.Text;
@@ -71,6 +76,9 @@ export class SecurityMinigameScene extends Phaser.Scene {
     this.shieldIntegrity = 100;
     this.spawnedCount = 0;
     this.packets = [];
+    this.maxStreak = 0;
+    this.currentStreak = 0;
+    this.gateAdjustmentsCount = 0;
   }
 
   create() {
@@ -253,6 +261,7 @@ export class SecurityMinigameScene extends Phaser.Scene {
   }
 
   private rotateGates(angleLeft: number, angleRight: number) {
+    this.gateAdjustmentsCount++;
     this.matter.body.setAngle(this.leftGateBody, angleLeft);
     this.leftGateGraphic.setRotation(angleLeft);
 
@@ -374,10 +383,13 @@ export class SecurityMinigameScene extends Phaser.Scene {
       packet.resolved = true;
       if (packet.isThreat) {
         this.threatsBlocked++;
+        this.currentStreak++;
+        if (this.currentStreak > this.maxStreak) this.maxStreak = this.currentStreak;
         this.threatsText.setText(`Amenazas Filtradas: ${this.threatsBlocked}`);
         this.createFlashEffect(target.position.x, target.position.y, 0x22c55e);
       } else {
         this.falsePositives++;
+        this.currentStreak = 0; // Rompe la racha de filtrado limpio
         this.fpText.setText(`Falsos Positivos: ${this.falsePositives}`);
         this.createFlashEffect(target.position.x, target.position.y, 0xfacc15);
       }
@@ -387,10 +399,13 @@ export class SecurityMinigameScene extends Phaser.Scene {
       packet.resolved = true;
       if (!packet.isThreat) {
         this.cleanDataSaved++;
+        this.currentStreak++;
+        if (this.currentStreak > this.maxStreak) this.maxStreak = this.currentStreak;
         this.cleanText.setText(`Datos Salvados: ${this.cleanDataSaved}`);
         this.createFlashEffect(target.position.x, target.position.y, 0x38bdf8);
       } else {
         // Malware impactó el núcleo
+        this.currentStreak = 0; // Rompe la racha de filtrado limpio
         this.shieldIntegrity = Math.max(0, this.shieldIntegrity - 20);
         this.shieldText.setText(`Blindaje del Núcleo: ${this.shieldIntegrity}%`);
         this.cameras.main.shake(180, 0.008);
@@ -447,15 +462,34 @@ export class SecurityMinigameScene extends Phaser.Scene {
       (threatRate * 50) + (cleanRate * 30) + ((this.shieldIntegrity / 100) * 20) - fpPenalty
     )));
 
+    // Tarea 19: Puntuación secundaria continua para 'net' en rango [55, 100]
+    const secondaryNetScore = Math.max(55, Math.min(100, Math.round(
+      (cleanRate * 50) + ((this.shieldIntegrity / 100) * 50)
+    )));
+
+    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
+    const behavioralBonuses: Partial<VocationalScores> = {};
+    if (this.maxStreak >= 8) {
+      behavioralBonuses.data = 0.7; // Atención selectiva y concentración sostenida
+    }
+    if (this.gateAdjustmentsCount <= 18 && primarySecScore >= 75) {
+      behavioralBonuses.biz = 0.5; // Compostura y serenidad bajo presión de flujo
+    } else if (this.gateAdjustmentsCount > 28) {
+      behavioralBonuses.net = 0.5; // Reacción rápida y control dinámico continuo
+    }
+
     const metrics: MinigameMetrics = {
       primaryScore: primarySecScore,
       secondaryBranch: 'net',
-      secondaryScore: this.shieldIntegrity >= 80 ? 80 : 65,
+      secondaryScore: secondaryNetScore,
+      behavioralBonuses,
       details: {
         'Amenazas Neutralizadas': `${this.threatsBlocked} / ${this.totalThreats}`,
         'Datos Limpios Salvados': `${this.cleanDataSaved} / ${this.totalCleanData}`,
         'Falsos Positivos': `${this.falsePositives}`,
         'Integridad del Blindaje': `${this.shieldIntegrity}%`,
+        'Racha Máx Sin Error': `${this.maxStreak} seguidos`,
+        'Ajustes de Deflector': `${this.gateAdjustmentsCount}`,
         'Tiempo de Filtrado': `${elapsedSeconds} seg`
       },
       feedbackSummary: `Blindaje exitoso. Lograste filtrar las amenazas con un ${Math.round(threatRate * 100)}% de efectividad y ${this.shieldIntegrity}% de integridad en el núcleo.`

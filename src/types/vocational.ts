@@ -13,7 +13,8 @@ export interface VocationalScores {
 export interface MinigameMetrics {
   primaryScore: number;         // 0 a 100 puntuación principal
   secondaryBranch?: CareerBranch;
-  secondaryScore?: number;       // 0 a 100 puntos extra
+  secondaryScore?: number;       // 0 a 100 puntos extra (continuo)
+  behavioralBonuses?: Partial<VocationalScores>; // Puntos vocacionales directos por comportamiento (stealth assessment)
   details: { [key: string]: number | string };
   feedbackSummary: string;
 }

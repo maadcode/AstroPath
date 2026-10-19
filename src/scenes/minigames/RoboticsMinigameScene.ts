@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { MinigameMetrics } from '../../types/vocational';
+import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
 interface RobotPart {
   id: number;
@@ -61,6 +61,12 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   private roughMovesCount = 0;
   private startTime = 0;
 
+  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
+  private firstGrabDelaySec = 0;
+  private regrabsCount = 0;
+  private failedDropsCount = 0;
+  private partGrabCounts: { [id: number]: number } = {};
+
   // UI
   private statusText!: Phaser.GameObjects.Text;
   private accuracyText!: Phaser.GameObjects.Text;
@@ -94,6 +100,10 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     this.heldPart = null;
     this.isMagnetActive = false;
     this.isClickLocked = false;
+    this.firstGrabDelaySec = 0;
+    this.regrabsCount = 0;
+    this.failedDropsCount = 0;
+    this.partGrabCounts = {};
     this.trolleyX = this.panelX;
     this.targetClawX = this.panelX;
     this.targetClawY = this.panelY + 40;
@@ -437,6 +447,17 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     this.heldPart = part;
     this.isMagnetActive = true;
 
+    // Stealth Assessment: Tiempo antes del primer agarre (planificación vs impulsividad)
+    if (this.firstGrabDelaySec === 0) {
+      this.firstGrabDelaySec = Math.max(0.1, (Date.now() - this.startTime) / 1000);
+    }
+
+    // Stealth Assessment: Conteo de re-agarres (iteración y tolerancia al fallo)
+    this.partGrabCounts[part.id] = (this.partGrabCounts[part.id] || 0) + 1;
+    if (this.partGrabCounts[part.id] > 1) {
+      this.regrabsCount++;
+    }
+
     // Destello de agarre magnético
     const f = this.add.circle(part.body.position.x, part.body.position.y, 22, 0x38bdf8, 0.8);
     this.tweens.add({
@@ -462,6 +483,8 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     if (distToSlot <= 50) {
       this.snapPartIntoSlot(part, distToSlot);
     } else {
+      // Stealth Assessment: Caída fallida fuera de la ranura
+      this.failedDropsCount++;
       // Dejar caer libremente sobre la mesa con gravedad
       this.matter.body.setStatic(part.body, false);
       this.matter.body.setVelocity(part.body, { x: 0, y: 1 });
@@ -792,15 +815,40 @@ export class RoboticsMinigameScene extends Phaser.Scene {
       (avgAccuracy * 0.6) + sequenceBonus + (25 - roughPenalty)
     )));
 
+    // Tarea 19: Puntuación secundaria continua para 'sec' en rango [55, 100]
+    const secondarySecScore = Math.max(55, Math.min(100, Math.round(
+      (avgAccuracy * 0.7) + Math.max(0, 30 - roughPenalty)
+    )));
+
+    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
+    const grabDelay = this.firstGrabDelaySec > 0 ? this.firstGrabDelaySec : elapsedSeconds;
+    const behavioralBonuses: Partial<VocationalScores> = {};
+    if (grabDelay >= 3.5) {
+      behavioralBonuses.data = 0.6; // Planificación e inspección visual previa
+    } else if (grabDelay <= 1.5) {
+      behavioralBonuses.dev = 0.5;  // Enfoque directo y pragmático
+    }
+
+    if (this.regrabsCount > 0) {
+      behavioralBonuses.dev = (behavioralBonuses.dev || 0) + 0.4; // Tolerancia al fallo / debugging iterativo
+    }
+
+    if (this.failedDropsCount === 0) {
+      behavioralBonuses.biz = 0.5; // Cuidado procedimental con recursos
+    }
+
     const metrics: MinigameMetrics = {
       primaryScore: primaryDevScore,
       secondaryBranch: 'sec',
-      secondaryScore: avgAccuracy >= 90 ? 88 : 72,
+      secondaryScore: secondarySecScore,
+      behavioralBonuses,
       details: {
         'Precisión Promedio': `${avgAccuracy}%`,
         'Orden Lógico': isSequential ? 'Secuencia Óptima (100%)' : 'Alternativo (75%)',
         'Control Cinemático': `${Math.max(60, 100 - roughPenalty)}%`,
-        'Tiempo de Montaje': `${elapsedSeconds} seg`
+        'Tiempo de Montaje': `${elapsedSeconds} seg`,
+        'Planificación Previa': `${grabDelay.toFixed(1)} seg`,
+        'Reintentos / Caídas': `${this.regrabsCount} / ${this.failedDropsCount}`
       },
       feedbackSummary: `Excelente capacidad de construcción lógica. Lograste un ${avgAccuracy}% de precisión de encaje y ${isSequential ? 'el orden ideal de compilación' : 'un montaje funcional'}.`
     };

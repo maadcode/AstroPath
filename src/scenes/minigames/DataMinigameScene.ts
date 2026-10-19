@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { MinigameMetrics } from '../../types/vocational';
+import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
 interface SampleSphere {
   body: MatterJS.BodyType;
@@ -30,6 +30,12 @@ export class DataMinigameScene extends Phaser.Scene {
   private samples: SampleSphere[] = [];
   private totalSamplesDropped = 0;
   private targetWeight = 115; // Peso objetivo de los bio-sensores
+
+  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
+  private massCounts: { [mass: number]: number } = { 5: 0, 15: 0, 35: 0 };
+  private oscillationCount = 0;
+  private prevAngleSign = 0;
+  private sliderAdjustmentsCount = 0;
 
   // Estabilidad
   private targetHoldSeconds = 3.0;
@@ -68,6 +74,10 @@ export class DataMinigameScene extends Phaser.Scene {
     this.totalSamplesDropped = 0;
     this.currentHoldSeconds = 0;
     this.isBalanced = false;
+    this.massCounts = { 5: 0, 15: 0, 35: 0 };
+    this.oscillationCount = 0;
+    this.prevAngleSign = 0;
+    this.sliderAdjustmentsCount = 0;
   }
 
   create() {
@@ -214,6 +224,7 @@ export class DataMinigameScene extends Phaser.Scene {
     // Control del contrapeso con clic y arrastre en la viga
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (pointer.isDown && pointer.y >= fulcrumY - 45 && pointer.y <= fulcrumY + 30) {
+        this.sliderAdjustmentsCount++;
         const offset = Phaser.Math.Clamp(pointer.x - fulcrumX, -160, 160);
         this.matter.body.setPosition(this.sliderWeightBody, {
           x: fulcrumX + offset,
@@ -262,6 +273,7 @@ export class DataMinigameScene extends Phaser.Scene {
 
   private dispenseSample(x: number, y: number, massValue: number, color: number, radius: number) {
     this.totalSamplesDropped++;
+    this.massCounts[massValue] = (this.massCounts[massValue] || 0) + 1;
 
     const body = this.matter.add.circle(x, y, radius, {
       restitution: 0.1,
@@ -349,6 +361,13 @@ export class DataMinigameScene extends Phaser.Scene {
     const angleDegrees = Phaser.Math.RadToDeg(this.beamBody.angle);
     const absAngle = Math.abs(angleDegrees);
 
+    // Stealth Assessment: Detección de oscilaciones al cruzar el eje horizontal
+    const currentSign = Math.sign(angleDegrees);
+    if (this.prevAngleSign !== 0 && currentSign !== 0 && currentSign !== this.prevAngleSign && absAngle > 0.5) {
+      this.oscillationCount++;
+    }
+    this.prevAngleSign = currentSign;
+
     this.statusText.setText(`Muestras Usadas: ${this.totalSamplesDropped}`);
 
     // Si la balanza está nivelada (ángulo menor a 2.5 grados)
@@ -390,14 +409,38 @@ export class DataMinigameScene extends Phaser.Scene {
       (accuracy * 0.7) + (30 - efficiencyPenalty)
     )));
 
+    // Tarea 19: Puntuación secundaria continua para 'dev' en rango [55, 100]
+    const secondaryDevScore = Math.max(55, Math.min(100, Math.round(
+      (accuracy * 0.75) + Math.max(0, 25 - efficiencyPenalty)
+    )));
+
+    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
+    const structuredDosing = (this.massCounts[35] > 0 || this.massCounts[15] > 0);
+    const bruteForceSpam = this.massCounts[5] >= 8;
+
+    const behavioralBonuses: Partial<VocationalScores> = {};
+    if (structuredDosing && !bruteForceSpam) {
+      behavioralBonuses.data = 0.8; // Razonamiento cuantitativo y estrategia combinatoria inductiva
+    }
+    if (this.sliderAdjustmentsCount > 5) {
+      behavioralBonuses.dev = 0.5; // Calibración iterativa continua
+    }
+    if (this.oscillationCount <= 4 && this.totalSamplesDropped > 0) {
+      behavioralBonuses.net = 0.5; // Control de estabilidad en sistemas dinámicos
+    }
+
     const metrics: MinigameMetrics = {
       primaryScore: primaryDataScore,
       secondaryBranch: 'dev',
-      secondaryScore: accuracy >= 95 ? 90 : 75,
+      secondaryScore: secondaryDevScore,
+      behavioralBonuses,
       details: {
         'Precisión de Balanza': `${accuracy}%`,
         'Margen de Error Residual': `±${absAngle.toFixed(2)}°`,
         'Muestras Dosificadas': `${this.totalSamplesDropped}`,
+        'Estrategia Dosificación': bruteForceSpam ? 'Fuerza Bruta (+5)' : 'Combinatoria Óptima',
+        'Oscilaciones Previas': `${this.oscillationCount}`,
+        'Ajustes Contrapeso': `${this.sliderAdjustmentsCount}`,
         'Tiempo de Estabilización': `${elapsedSeconds} seg`
       },
       feedbackSummary: `Equilibrio analítico perfecto. Lograste estabilizar la balanza bio-sensorial en ${this.targetHoldSeconds}s con un margen de error menor al 2%.`

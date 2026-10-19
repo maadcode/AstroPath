@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { MinigameMetrics } from '../../types/vocational';
+import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
 interface CableData {
   id: number;
@@ -38,6 +38,10 @@ export class NetworkMinigameScene extends Phaser.Scene {
   private simulatedLatency = 38; // ms inicial
   private startTime = 0;
 
+  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
+  private failedConnectAttempts = 0;
+  private connectionOrder: number[] = [];
+
   // UI Texts
   private statusText!: Phaser.GameObjects.Text;
   private signalText!: Phaser.GameObjects.Text;
@@ -71,6 +75,8 @@ export class NetworkMinigameScene extends Phaser.Scene {
     this.cables = [];
     this.activeDragCable = null;
     this.dragConstraint = null;
+    this.failedConnectAttempts = 0;
+    this.connectionOrder = [];
   }
 
   create() {
@@ -322,6 +328,9 @@ export class NetworkMinigameScene extends Phaser.Scene {
     if (distToTarget <= 32) {
       // Conectar con éxito
       this.snapCableToTarget(cable, targetX, targetY);
+    } else {
+      // Stealth Assessment: Intento fallido de inserción
+      this.failedConnectAttempts++;
     }
 
     this.activeDragCable = null;
@@ -330,6 +339,7 @@ export class NetworkMinigameScene extends Phaser.Scene {
   private snapCableToTarget(cable: CableData, targetX: number, targetY: number) {
     cable.connected = true;
     this.connectionsCount++;
+    this.connectionOrder.push(cable.id);
 
     // Bloquear físicamente en el puerto
     this.matter.body.setPosition(cable.tipBody, { x: targetX, y: targetY });
@@ -444,15 +454,39 @@ export class NetworkMinigameScene extends Phaser.Scene {
     const signalScore = Math.round(this.signalQuality);
     const primaryNetScore = Math.max(50, Math.min(100, Math.round((signalScore * 0.6) + ((100 - tensionPenalty) * 0.4))));
 
+    // Tarea 19 y 22: Puntuación secundaria continua para 'biz' en rango [55, 100]
+    const secondaryBizScore = Math.max(55, Math.min(100, Math.round(
+      (signalScore * 0.6) + ((100 - tensionPenalty) * 0.4)
+    )));
+
+    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
+    const behavioralBonuses: Partial<VocationalScores> = {};
+    if (this.failedConnectAttempts === 0) {
+      behavioralBonuses.sec = 0.6; // Alta compostura y rigor procedimental
+    }
+    if (this.connectionOrder.length > 0 && (this.connectionOrder[0] === 1 || this.connectionOrder[0] === 3)) {
+      behavioralBonuses.biz = 0.6; // Priorización de líneas críticas antes de ocio
+    }
+    if (signalScore >= 90) {
+      behavioralBonuses.net = 0.5; // Calidad de ruteo y aislamiento de bobina
+    }
+
+    const priorityLabel = this.connectionOrder.length > 0
+      ? (this.connectionOrder[0] === 3 ? 'Emergencia Primero' : (this.connectionOrder[0] === 1 ? 'Datos Núcleo Primero' : 'Canal Secundario'))
+      : 'Estándar';
+
     const metrics: MinigameMetrics = {
       primaryScore: primaryNetScore,
-      secondaryBranch: 'sec',
-      secondaryScore: signalScore >= 90 ? 85 : 70,
+      secondaryBranch: 'biz',
+      secondaryScore: secondaryBizScore,
+      behavioralBonuses,
       details: {
         'Latencia Final': `${this.simulatedLatency} ms`,
         'Calidad de Enlace': `${signalScore}%`,
         'Cuidado de Tensión': `${100 - tensionPenalty}%`,
-        'Tiempo de Parcheo': `${elapsedSeconds} seg`
+        'Tiempo de Parcheo': `${elapsedSeconds} seg`,
+        'Fallos de Inserción': `${this.failedConnectAttempts}`,
+        'Estrategia de Ruteo': priorityLabel
       },
       feedbackSummary: `Excelente ruteo físico. Lograste una latencia ultra baja de ${this.simulatedLatency}ms preservando el 100% de los canales sin cortes.`
     };

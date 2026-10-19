@@ -200,9 +200,11 @@ export class ReportScene extends Phaser.Scene {
         fontFamily: 'sans-serif'
       });
 
-      const scoreText = metrics ? `Puntaje: ${metrics.primaryScore}/100` : 'No calibrado';
+      const scoreText = metrics 
+        ? `Prim: ${metrics.primaryScore}/100  |  Sec (${metrics.secondaryBranch?.toUpperCase()}): ${metrics.secondaryScore}/100` 
+        : 'No calibrado';
       this.add.text(centerX + cardWidth / 2 - 16, curY, scoreText, {
-        fontSize: '11px',
+        fontSize: '10.5px',
         color: '#facc15',
         fontStyle: 'bold',
         fontFamily: 'sans-serif'
@@ -211,10 +213,10 @@ export class ReportScene extends Phaser.Scene {
       curY += 18;
 
       if (metrics && metrics.details) {
-        const detailsArr = Object.entries(metrics.details).slice(0, 2);
-        const detailStr = detailsArr.map(([k, v]) => `${k}: ${v}`).join('  |  ');
+        const detailsArr = Object.entries(metrics.details).slice(0, 3);
+        const detailStr = detailsArr.map(([k, v]) => `${k}: ${v}`).join(' • ');
         this.add.text(centerX - cardWidth / 2 + 20, curY, detailStr, {
-          fontSize: '10px',
+          fontSize: '9.5px',
           color: '#cbd5e1',
           fontFamily: 'sans-serif'
         });
