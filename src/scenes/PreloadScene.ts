@@ -371,5 +371,44 @@ export class PreloadScene extends Phaser.Scene {
     check.lineTo(17, 8);
     check.strokePath();
     check.generateTexture('check_bubble', 24, 24);
+    check.destroy();
+
+    // 8. Texturas para partículas cósmicas y estelares del espacio exterior (4x4 px)
+    // 8.1 Polvo estelar blanco y cian
+    const starG = this.make.graphics({ x: 0, y: 0 });
+    starG.fillStyle(0x38bdf8, 0.6);
+    starG.fillRect(0, 0, 4, 4);
+    starG.fillStyle(0xffffff, 1);
+    starG.fillRect(1, 1, 2, 2);
+    starG.generateTexture('particle_star', 4, 4);
+    starG.destroy();
+
+    // 8.2 Chispas cósmicas / micro-destellos naranjas
+    const sparkG = this.make.graphics({ x: 0, y: 0 });
+    sparkG.fillStyle(0xf97316, 0.9);
+    sparkG.fillRect(1, 0, 2, 4);
+    sparkG.fillRect(0, 1, 4, 2);
+    sparkG.fillStyle(0xfef08a, 1);
+    sparkG.fillRect(1, 1, 2, 2);
+    sparkG.generateTexture('particle_spark', 4, 4);
+    sparkG.destroy();
+
+    // 8.3 Bruma nebulosa / esporas de energía verde-esmeralda
+    const sporeG = this.make.graphics({ x: 0, y: 0 });
+    sporeG.fillStyle(0x34d399, 0.5);
+    sporeG.fillCircle(2, 2, 2);
+    sporeG.fillStyle(0xa7f3d0, 0.9);
+    sporeG.fillRect(1, 1, 2, 2);
+    sporeG.generateTexture('particle_spore', 4, 4);
+    sporeG.destroy();
+
+    // 8.4 Polvo estelar dorado profundo
+    const dustG = this.make.graphics({ x: 0, y: 0 });
+    dustG.fillStyle(0xfbbf24, 0.6);
+    dustG.fillCircle(2, 2, 1.8);
+    dustG.fillStyle(0xfef3c7, 0.95);
+    dustG.fillRect(1, 1, 2, 2);
+    dustG.generateTexture('particle_dust', 4, 4);
+    dustG.destroy();
   }
 }

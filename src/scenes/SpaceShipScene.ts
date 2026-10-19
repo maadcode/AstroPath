@@ -21,6 +21,7 @@ export class SpaceShipScene extends Phaser.Scene {
   private spaceKey!: Phaser.Input.Keyboard.Key;
 
   private npcs: InteractiveNPC[] = [];
+  private ambientEmitters: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
   private gameState = GameState.getInstance();
   private nearbyNpc: InteractiveNPC | null = null;
   private isInteracting = false;
@@ -76,7 +77,10 @@ export class SpaceShipScene extends Phaser.Scene {
     // 5. Instanciar NPCs Jefes y Pasajeros en las salas del mapa
     this.spawnStationNPCs();
 
-    // 6. Controles por teclado
+    // 6. Partículas ambientales sutiles por zona temática
+    this.createAmbientParticles();
+
+    // 7. Controles por teclado
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
       this.wasdKeys = {
@@ -282,6 +286,114 @@ export class SpaceShipScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut'
     });
+  }
+
+  private createAmbientParticles() {
+    // Delimitación exterior de la nave espacial (para evitar que cualquier partícula entre a las salas)
+    const shipBounds = new Phaser.Geom.Rectangle(720, 20, 665, 755);
+
+    // Fuente de emisión que genera puntos en todo el espacio exterior (arriba, abajo, izquierda y derecha)
+    const spaceSource = {
+      getRandomPoint: (point: Phaser.Types.Math.Vector2Like) => {
+        let x = 0;
+        let y = 0;
+        while (true) {
+          x = Phaser.Math.Between(10, 1910);
+          y = Phaser.Math.Between(10, 1430);
+          // Si el punto NO está dentro del casco de la nave, es espacio exterior válido
+          if (!(x >= 720 && x <= 1385 && y >= 20 && y <= 775)) {
+            break;
+          }
+        }
+        point.x = x;
+        point.y = y;
+        return point;
+      }
+    };
+
+    // 1. Polvo estelar y estrellas tenues (Twinkling stardust)
+    const starEmitter = this.add.particles(0, 0, 'particle_star', {
+      emitZone: { type: 'random', source: spaceSource } as any,
+      deathZone: {
+        type: 'onEnter',
+        source: shipBounds
+      } as any,
+      speed: { min: 3, max: 12 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.45, end: 1.0 },
+      alpha: { start: 0.2, end: 0.8 },
+      lifespan: { min: 3500, max: 6500 },
+      frequency: 90,
+      quantity: 1,
+      maxAliveParticles: 48,
+      advance: 5000,
+      blendMode: 'ADD'
+    });
+    starEmitter.setDepth(-20);
+    this.ambientEmitters.push(starEmitter);
+
+    // 2. Chispas cósmicas y micro-destellos espaciales
+    const sparkEmitter = this.add.particles(0, 0, 'particle_spark', {
+      emitZone: { type: 'random', source: spaceSource } as any,
+      deathZone: {
+        type: 'onEnter',
+        source: shipBounds
+      } as any,
+      speed: { min: 5, max: 18 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.85, end: 0.25 },
+      alpha: { start: 0.7, end: 0 },
+      lifespan: { min: 2500, max: 5000 },
+      frequency: 110,
+      quantity: 1,
+      maxAliveParticles: 45,
+      advance: 5000,
+      blendMode: 'ADD'
+    });
+    sparkEmitter.setDepth(-20);
+    this.ambientEmitters.push(sparkEmitter);
+
+    // 3. Velo de nebulosa cósmica / esporas de energía espacial
+    const nebulaEmitter = this.add.particles(0, 0, 'particle_spore', {
+      emitZone: { type: 'random', source: spaceSource } as any,
+      deathZone: {
+        type: 'onEnter',
+        source: shipBounds
+      } as any,
+      speed: { min: 2, max: 10 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.5, end: 1.2 },
+      alpha: { start: 0.15, end: 0.55 },
+      lifespan: { min: 4000, max: 7500 },
+      frequency: 120,
+      quantity: 1,
+      maxAliveParticles: 45,
+      advance: 5000,
+      blendMode: 'ADD'
+    });
+    nebulaEmitter.setDepth(-20);
+    this.ambientEmitters.push(nebulaEmitter);
+
+    // 4. Motas de polvo cósmico dorado profundo
+    const dustEmitter = this.add.particles(0, 0, 'particle_dust', {
+      emitZone: { type: 'random', source: spaceSource } as any,
+      deathZone: {
+        type: 'onEnter',
+        source: shipBounds
+      } as any,
+      speed: { min: 3, max: 14 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.65, end: 0.3 },
+      alpha: { start: 0.2, end: 0.65 },
+      lifespan: { min: 3500, max: 6500 },
+      frequency: 100,
+      quantity: 1,
+      maxAliveParticles: 48,
+      advance: 5000,
+      blendMode: 'ADD'
+    });
+    dustEmitter.setDepth(-20);
+    this.ambientEmitters.push(dustEmitter);
   }
 
   private handlePlayerMovement() {
