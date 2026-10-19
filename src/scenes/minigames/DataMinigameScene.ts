@@ -1,10 +1,15 @@
 import * as Phaser from 'phaser';
 import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
-interface SampleSphere {
-  body: MatterJS.BodyType;
-  graphic: Phaser.GameObjects.Graphics;
-  massValue: number;
+interface CropSpecies {
+  id: number;
+  name: string;
+  scientificName: string;
+  description: string;
+  targetT: number; // 10 a 45 °C
+  targetH: number; // 20 a 90 %
+  targetL: number; // 10 a 100 Klx
+  curveType: 'gaussian' | 'sigmoid' | 'bimodal';
 }
 
 export class DataMinigameScene extends Phaser.Scene {
@@ -13,75 +18,108 @@ export class DataMinigameScene extends Phaser.Scene {
   private panelX = 512;
   private panelY = 320;
 
-  // Mecanismo de balanza basculante de Matter
-  private fulcrumBody!: MatterJS.BodyType;
-  private beamBody!: MatterJS.BodyType;
-  private leftPanBody!: MatterJS.BodyType;
-  private rightPanBody!: MatterJS.BodyType;
-  private sliderWeightBody!: MatterJS.BodyType;
+  // Especies y ciclos de cultivo
+  private speciesList: CropSpecies[] = [
+    {
+      id: 1,
+      name: 'Algassus Primus',
+      scientificName: 'Bio-filtro de Oxígeno',
+      description: 'Crecimiento unimodal simétrico. Requiere temperatura cálida y humedad moderada para florecer.',
+      targetT: 32,
+      targetH: 60,
+      targetL: 50,
+      curveType: 'gaussian'
+    },
+    {
+      id: 2,
+      name: 'Fungus Lumina',
+      scientificName: 'Micelio Bio-Luminiscente',
+      description: 'Crecimiento de fase lenta con saturación en meseta. Prospera en alta humedad y luz tenue.',
+      targetT: 22,
+      targetH: 80,
+      targetL: 25,
+      curveType: 'sigmoid'
+    },
+    {
+      id: 3,
+      name: 'Solanaceae Orbitalis',
+      scientificName: 'Cultivo Nutritivo Hidropónico',
+      description: 'Patrón bimodal complejo (fase diurna y nocturna). Exige balance crítico de radiación térmica y lumínica.',
+      targetT: 38,
+      targetH: 50,
+      targetL: 75,
+      curveType: 'bimodal'
+    }
+  ];
 
-  private beamGraphic!: Phaser.GameObjects.Rectangle;
-  private leftPanGraphic!: Phaser.GameObjects.Rectangle;
-  private rightPanGraphic!: Phaser.GameObjects.Rectangle;
-  private sliderGraphic!: Phaser.GameObjects.Rectangle;
-  private cableGraphics!: Phaser.GameObjects.Graphics;
+  private currentCycleIndex = 0;
+  private cycleAccuracies: number[] = [];
+  private cycleRmses: number[] = [];
 
-  // Muestras dosificadas
-  private samples: SampleSphere[] = [];
-  private totalSamplesDropped = 0;
-  private targetWeight = 115; // Peso objetivo de los bio-sensores
+  // Parámetros del jugador
+  private paramT = 20; // Temperatura (°C) [10 - 45]
+  private paramH = 40; // Humedad (%) [20 - 90]
+  private paramL = 30; // Luz (Klx) [10 - 100]
 
-  // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
-  private massCounts: { [mass: number]: number } = { 5: 0, 15: 0, 35: 0 };
-  private oscillationCount = 0;
-  private prevAngleSign = 0;
-  private sliderAdjustmentsCount = 0;
-
-  // Estabilidad
-  private targetHoldSeconds = 3.0;
-  private currentHoldSeconds = 0;
-  private isBalanced = false;
+  // Métricas y Stealth Assessment
   private startTime = 0;
+  private cycleStartTime = 0;
+  private firstAdjustmentTimeRecorded = false;
+  private observationTimes: number[] = [];
+  private totalAdjustments = 0;
+  private usedStepButtonsCount = 0;
 
-  // UI
-  private statusText!: Phaser.GameObjects.Text;
-  private deviationText!: Phaser.GameObjects.Text;
-  private holdProgressText!: Phaser.GameObjects.Text;
-  private stabilityBarBg!: Phaser.GameObjects.Rectangle;
-  private stabilityBarFill!: Phaser.GameObjects.Rectangle;
+  // Gráficos y UI
+  private graphBg!: Phaser.GameObjects.Rectangle;
+  private graphGraphics!: Phaser.GameObjects.Graphics;
+  private graphX = 330;
+  private graphY = 320;
+  private graphWidth = 420;
+  private graphHeight = 270;
+
+  // Textos del HUD
+  private speciesTitleText!: Phaser.GameObjects.Text;
+  private speciesDescText!: Phaser.GameObjects.Text;
+  private cycleIndicatorText!: Phaser.GameObjects.Text;
+  private correlationText!: Phaser.GameObjects.Text;
+  private rmseText!: Phaser.GameObjects.Text;
+  private confirmBtn!: Phaser.GameObjects.Rectangle;
+  private confirmBtnText!: Phaser.GameObjects.Text;
+
+  // Sliders UI Controllers
+  private sliderTController?: { setVal: (val: number) => void };
+  private sliderHController?: { setVal: (val: number) => void };
+  private sliderLController?: { setVal: (val: number) => void };
+
   private completedModal!: Phaser.GameObjects.Container;
-
   private onCompleteCallback?: (metrics: MinigameMetrics) => void;
   private onCancelCallback?: () => void;
 
   constructor() {
     super({
-      key: 'DataMinigameScene',
-      physics: {
-        default: 'matter',
-        matter: {
-          gravity: { x: 0, y: 0.8 },
-          debug: false
-        }
-      }
+      key: 'DataMinigameScene'
     });
   }
 
   init(data: { onComplete?: (metrics: MinigameMetrics) => void; onCancel?: () => void }) {
     this.onCompleteCallback = data.onComplete;
     this.onCancelCallback = data.onCancel;
-    this.samples = [];
-    this.totalSamplesDropped = 0;
-    this.currentHoldSeconds = 0;
-    this.isBalanced = false;
-    this.massCounts = { 5: 0, 15: 0, 35: 0 };
-    this.oscillationCount = 0;
-    this.prevAngleSign = 0;
-    this.sliderAdjustmentsCount = 0;
+    this.currentCycleIndex = 0;
+    this.cycleAccuracies = [];
+    this.cycleRmses = [];
+    this.totalAdjustments = 0;
+    this.usedStepButtonsCount = 0;
+    this.observationTimes = [];
+    this.firstAdjustmentTimeRecorded = false;
+    this.paramT = 20;
+    this.paramH = 40;
+    this.paramL = 30;
   }
 
   create() {
     this.startTime = Date.now();
+    this.cycleStartTime = Date.now();
+    this.firstAdjustmentTimeRecorded = false;
     const { width, height } = this.scale;
 
     // 1. Overlay oscuro
@@ -93,18 +131,18 @@ export class DataMinigameScene extends Phaser.Scene {
     frame.setStrokeStyle(3, 0x8b5cf6);
 
     // Cabecera
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '📊 LABORATORIO DE CULTIVOS // BALANZA BIO-SENSORIAL', {
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '📊 LABORATORIO DE CULTIVOS // ANALIZADOR DE PATRONES DE CRECIMIENTO', {
       fontSize: '17px',
       color: '#c084fc',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 50, 'Dosifica muestras de nutrientes y ajusta el contrapeso deslizante para equilibrar la balanza analítica.\nMantén el sistema dentro de la zona de correlación verde durante 3 segundos continuos.', {
-      fontSize: '12px',
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 48, 'Modula los parámetros bio-ambientales (Temperatura, Humedad, Luz) para ajustar la curva del cultivo\nal patrón de referencia óptimo del bio-sensor. Alcanza un 82% de similitud para validar cada ciclo.', {
+      fontSize: '11.5px',
       color: '#94a3b8',
       fontFamily: 'sans-serif',
-      lineSpacing: 4
+      lineSpacing: 3
     });
 
     // Botón Salir
@@ -113,320 +151,487 @@ export class DataMinigameScene extends Phaser.Scene {
     this.add.text(cancelBtn.x, cancelBtn.y, 'Cerrar', { fontSize: '12px', color: '#f1f5f9', fontStyle: 'bold' }).setOrigin(0.5);
     cancelBtn.on('pointerdown', () => this.closeMinigame());
 
-    // 3. Establecer límites físicos
-    const minX = this.panelX - this.panelWidth / 2 + 20;
-    const maxX = this.panelX + this.panelWidth / 2 - 20;
-    const minY = this.panelY - this.panelHeight / 2 + 100;
-    const maxY = this.panelY + this.panelHeight / 2 - 60;
-    this.matter.world.setBounds(minX, minY, maxX - minX, maxY - minY, 32, true, true, true, true);
+    // 3. Área de visualización gráfica (Izquierda)
+    this.setupGraphArea();
 
-    // 4. Crear la balanza física con pivote
-    this.cableGraphics = this.add.graphics();
-    this.setupScaleMechanism();
+    // 4. Panel de control con sliders y sensores (Derecha)
+    this.setupControlSliders();
 
-    // 5. Botones dosificadores de muestras
-    this.setupDispensers();
+    // 5. Cargar datos del primer ciclo de cultivo
+    this.loadCropCycle(0);
 
-    // 6. HUD y medidor de estabilidad
-    this.setupHUD();
-
-    // 7. Modal de finalización
+    // 6. Modal de finalización
     this.createCompletionModal();
   }
 
-  private setupScaleMechanism() {
-    const fulcrumX = this.panelX;
-    const fulcrumY = this.panelY - 20;
-    const beamLength = 460;
+  private setupGraphArea() {
+    // Fondo de la cuadrícula
+    this.graphBg = this.add.rectangle(this.graphX, this.graphY, this.graphWidth, this.graphHeight, 0x0b1120);
+    this.graphBg.setStrokeStyle(1.5, 0x334155);
 
-    // Fulcro / Soporte central (Triangular / Rectangular fijo)
-    const fulcrumGraphic = this.add.triangle(fulcrumX, fulcrumY + 50, 0, 80, 30, 0, 60, 80, 0x334155);
-    fulcrumGraphic.setStrokeStyle(2, 0x8b5cf6);
+    this.graphGraphics = this.add.graphics();
 
-    this.fulcrumBody = this.matter.add.circle(fulcrumX, fulcrumY, 12, {
-      isStatic: true
-    });
-
-    // Viga horizontal oscilante
-    this.beamBody = this.matter.add.rectangle(fulcrumX, fulcrumY, beamLength, 16, {
-      density: 0.003,
-      frictionAir: 0.05,
-      friction: 0.2,
-      label: 'scale_beam'
-    });
-
-    this.beamGraphic = this.add.rectangle(fulcrumX, fulcrumY, beamLength, 16, 0x1e293b);
-    this.beamGraphic.setStrokeStyle(2, 0xa855f7);
-
-    // Pivote central fijo
-    this.matter.add.constraint(this.fulcrumBody, this.beamBody, 0, 0.98, {
-      pointA: { x: 0, y: 0 },
-      pointB: { x: 0, y: 0 }
-    });
-
-    // Contrapeso deslizante en la viga (ajuste analítico fino)
-    this.sliderWeightBody = this.matter.add.rectangle(fulcrumX, fulcrumY - 14, 30, 16, {
-      density: 0.006,
-      frictionAir: 0.08,
-      label: 'slider_weight'
-    });
-
-    this.sliderGraphic = this.add.rectangle(fulcrumX, fulcrumY - 14, 30, 16, 0xfacc15);
-    this.sliderGraphic.setStrokeStyle(1, 0xffffff);
-
-    // Constraint que une el deslizador a la viga permitiendo desplazamiento
-    this.matter.add.constraint(this.beamBody, this.sliderWeightBody, 14, 0.9, {
-      pointA: { x: 0, y: -14 },
-      pointB: { x: 0, y: 0 }
-    });
-
-    // Plato Izquierdo (Demanda Biológica Sensor - Peso de referencia predeterminado)
-    const panY = fulcrumY + 110;
-    const leftPanX = fulcrumX - 190;
-    const rightPanX = fulcrumX + 190;
-
-    this.leftPanBody = this.matter.add.rectangle(leftPanX, panY, 110, 16, {
-      density: 0.004,
-      frictionAir: 0.06,
-      label: 'left_pan'
-    });
-    this.leftPanGraphic = this.add.rectangle(leftPanX, panY, 110, 16, 0x1e293b);
-    this.leftPanGraphic.setStrokeStyle(2, 0x38bdf8);
-
-    // Muestra objetivo dibujada en el plato izquierdo
-    const refWeightG = this.add.rectangle(leftPanX, panY - 18, 50, 24, 0x0284c7);
-    refWeightG.setStrokeStyle(1.5, 0x38bdf8);
-    this.add.text(leftPanX, panY - 18, `OBJETIVO\n${this.targetWeight} mg`, { fontSize: '9px', color: '#e0f2fe', align: 'center', fontStyle: 'bold' }).setOrigin(0.5);
-
-    // Plato Derecho (Dosificador de Mezcla)
-    this.rightPanBody = this.matter.add.rectangle(rightPanX, panY, 110, 16, {
-      density: 0.001,
-      frictionAir: 0.06,
-      label: 'right_pan'
-    });
-    this.rightPanGraphic = this.add.rectangle(rightPanX, panY, 110, 16, 0x1e293b);
-    this.rightPanGraphic.setStrokeStyle(2, 0x10b981);
-    this.add.text(rightPanX, panY + 20, 'DOSIFICADOR', { fontSize: '9px', color: '#6ee7b7', fontStyle: 'bold' }).setOrigin(0.5);
-
-    // Unir platos a los extremos de la viga con varillas/constraints
-    this.matter.add.constraint(this.beamBody, this.leftPanBody, 110, 0.85, {
-      pointA: { x: -190, y: 0 },
-      pointB: { x: 0, y: 0 },
-      damping: 0.1
-    });
-
-    this.matter.add.constraint(this.beamBody, this.rightPanBody, 110, 0.85, {
-      pointA: { x: 190, y: 0 },
-      pointB: { x: 0, y: 0 },
-      damping: 0.1
-    });
-
-    // Control del contrapeso con clic y arrastre en la viga
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.isDown && pointer.y >= fulcrumY - 45 && pointer.y <= fulcrumY + 30) {
-        this.sliderAdjustmentsCount++;
-        const offset = Phaser.Math.Clamp(pointer.x - fulcrumX, -160, 160);
-        this.matter.body.setPosition(this.sliderWeightBody, {
-          x: fulcrumX + offset,
-          y: fulcrumY - 14
-        });
-      }
-    });
-  }
-
-  private setupDispensers() {
-    const rightPanX = this.panelX + 190;
-    const dispenserY = this.panelY - 100;
-
-    const btnWidth = 100;
-    const btnHeight = 36;
-    const startX = rightPanX - 110;
-
-    const sampleTypes = [
-      { name: '+15 Hidratación', mass: 15, color: 0x38bdf8, colorHex: '#38bdf8', size: 10 },
-      { name: '+35 Nutrientes', mass: 35, color: 0x22c55e, colorHex: '#4ade80', size: 14 },
-      { name: '+5 Minerales', mass: 5, color: 0xfacc15, colorHex: '#fde047', size: 7 }
-    ];
-
-    sampleTypes.forEach((s, idx) => {
-      const btn = this.add.rectangle(startX + idx * (btnWidth + 10), dispenserY, btnWidth, btnHeight, 0x1e293b).setInteractive({ useHandCursor: true });
-      btn.setStrokeStyle(1.5, s.color);
-
-      this.add.text(btn.x, btn.y, s.name, {
-        fontSize: '10px',
-        color: s.colorHex,
-        fontStyle: 'bold',
-        fontFamily: 'sans-serif'
-      }).setOrigin(0.5);
-
-      btn.on('pointerdown', () => {
-        this.dispenseSample(rightPanX + Phaser.Math.Between(-25, 25), dispenserY + 30, s.mass, s.color, s.size);
-      });
-    });
-
-    this.add.text(rightPanX, dispenserY - 26, 'TOLVAS DISPENSADORAS DE MUESTRAS', {
+    // Etiquetas de los ejes
+    this.add.text(this.graphX - this.graphWidth / 2 + 8, this.graphY - this.graphHeight / 2 + 6, '▲ Biomasa (%)', {
       fontSize: '10px',
-      color: '#cbd5e1',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-  }
-
-  private dispenseSample(x: number, y: number, massValue: number, color: number, radius: number) {
-    this.totalSamplesDropped++;
-    this.massCounts[massValue] = (this.massCounts[massValue] || 0) + 1;
-
-    const body = this.matter.add.circle(x, y, radius, {
-      restitution: 0.1,
-      friction: 0.3,
-      density: 0.001 * (massValue / 10),
-      label: 'sample_sphere'
-    });
-
-    const g = this.add.graphics();
-    g.fillStyle(color, 1);
-    g.fillCircle(0, 0, radius);
-    g.lineStyle(1.5, 0xffffff, 0.8);
-    g.strokeCircle(0, 0, radius);
-
-    this.samples.push({
-      body,
-      graphic: g,
-      massValue
-    });
-  }
-
-  private setupHUD() {
-    const barY = this.panelY + this.panelHeight / 2 - 35;
-    const startX = this.panelX - this.panelWidth / 2 + 40;
-
-    this.statusText = this.add.text(startX, barY, 'Muestras Usadas: 0', {
-      fontSize: '13px',
-      color: '#c084fc',
-      fontStyle: 'bold',
+      color: '#94a3b8',
       fontFamily: 'sans-serif'
     });
 
-    this.deviationText = this.add.text(startX + 180, barY, 'Desviación: --', {
+    this.add.text(this.graphX + this.graphWidth / 2 - 14, this.graphY + this.graphHeight / 2 - 16, 'Días ▶', {
+      fontSize: '10px',
+      color: '#94a3b8',
+      fontFamily: 'sans-serif'
+    }).setOrigin(1, 0);
+
+    // Leyenda de curvas
+    const legendY = this.graphY + this.graphHeight / 2 + 16;
+    
+    // Objetivo
+    const l1 = this.add.rectangle(this.graphX - 140, legendY, 20, 3, 0xfacc15);
+    this.add.text(l1.x + 16, legendY, 'Patrón Objetivo (Sensor)', { fontSize: '10.5px', color: '#facc15' }).setOrigin(0, 0.5);
+
+    // Jugador
+    const l2 = this.add.rectangle(this.graphX + 40, legendY, 20, 3, 0x38bdf8);
+    this.add.text(l2.x + 16, legendY, 'Curva Calibrada (Actual)', { fontSize: '10.5px', color: '#38bdf8' }).setOrigin(0, 0.5);
+
+    // HUD de correlación y error en tiempo real
+    const metricY = this.graphY + this.graphHeight / 2 + 42;
+    this.correlationText = this.add.text(this.graphX - 160, metricY, 'Similitud R²: 0.0%', {
       fontSize: '13px',
       color: '#facc15',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
-    this.holdProgressText = this.add.text(startX + 380, barY, 'Estabilidad Sostenida: 0.0s / 3.0s', {
+    this.rmseText = this.add.text(this.graphX + 20, metricY, 'Error RMSE: 0.0', {
       fontSize: '13px',
-      color: '#38bdf8',
+      color: '#94a3b8',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
-
-    // Barra visual de estabilidad sostenida
-    this.stabilityBarBg = this.add.rectangle(startX + 690, barY + 8, 120, 14, 0x1e293b).setOrigin(0, 0.5);
-    this.stabilityBarBg.setStrokeStyle(1, 0x475569);
-    this.stabilityBarFill = this.add.rectangle(startX + 690, barY + 8, 0, 14, 0x22c55e).setOrigin(0, 0.5);
   }
 
-  update(_: number, delta: number) {
-    // 1. Sincronizar posición gráfica de la balanza
-    this.beamGraphic.setPosition(this.beamBody.position.x, this.beamBody.position.y);
-    this.beamGraphic.setRotation(this.beamBody.angle);
+  private setupControlSliders() {
+    const startX = this.panelX + 130;
+    const startY = this.panelY - 110;
 
-    this.leftPanGraphic.setPosition(this.leftPanBody.position.x, this.leftPanBody.position.y);
-    this.leftPanGraphic.setRotation(this.leftPanBody.angle);
+    // Tarjeta informativa de la especie
+    const cardBg = this.add.rectangle(startX + 105, startY + 15, 255, 75, 0x1e1b4b, 0.6);
+    cardBg.setStrokeStyle(1, 0x6366f1);
 
-    this.rightPanGraphic.setPosition(this.rightPanBody.position.x, this.rightPanBody.position.y);
-    this.rightPanGraphic.setRotation(this.rightPanBody.angle);
+    this.cycleIndicatorText = this.add.text(startX - 10, startY - 12, 'CICLO 1 / 3', {
+      fontSize: '11px',
+      color: '#a5b4fc',
+      fontStyle: 'bold'
+    });
 
-    this.sliderGraphic.setPosition(this.sliderWeightBody.position.x, this.sliderWeightBody.position.y);
+    this.speciesTitleText = this.add.text(startX - 10, startY + 6, 'Algassus Primus', {
+      fontSize: '14px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
 
-    // 2. Dibujar cuerdas de suspensión de los platos
-    this.cableGraphics.clear();
-    this.cableGraphics.lineStyle(2, 0x64748b, 0.8);
+    this.speciesDescText = this.add.text(startX - 10, startY + 26, 'Bio-filtro de Oxígeno', {
+      fontSize: '10px',
+      color: '#cbd5e1',
+      wordWrap: { width: 235 }
+    });
 
-    const beamLeftX = this.beamBody.position.x - 190 * Math.cos(this.beamBody.angle);
-    const beamLeftY = this.beamBody.position.y - 190 * Math.sin(this.beamBody.angle);
-    this.cableGraphics.lineBetween(beamLeftX, beamLeftY, this.leftPanBody.position.x, this.leftPanBody.position.y);
+    // Controles de Deslizadores (Temperatura, Humedad, Luz)
+    const sliderWidth = 140;
+    const sliderBaseY = startY + 95;
 
-    const beamRightX = this.beamBody.position.x + 190 * Math.cos(this.beamBody.angle);
-    const beamRightY = this.beamBody.position.y + 190 * Math.sin(this.beamBody.angle);
-    this.cableGraphics.lineBetween(beamRightX, beamRightY, this.rightPanBody.position.x, this.rightPanBody.position.y);
+    // 1. Slider Temperatura
+    this.sliderTController = this.setupSingleSlider(
+      startX, sliderBaseY, sliderWidth,
+      '🌡️ Temperatura', '#f87171', 10, 45, '°C',
+      this.paramT,
+      (val) => { this.paramT = val; this.onParameterChanged(); }
+    );
 
-    // 3. Sincronizar muestras
-    for (const s of this.samples) {
-      s.graphic.setPosition(s.body.position.x, s.body.position.y);
-      s.graphic.setRotation(s.body.angle);
-    }
+    // 2. Slider Humedad
+    this.sliderHController = this.setupSingleSlider(
+      startX, sliderBaseY + 58, sliderWidth,
+      '💧 Humedad Relativa', '#60a5fa', 20, 90, '%',
+      this.paramH,
+      (val) => { this.paramH = val; this.onParameterChanged(); }
+    );
 
-    // 4. Calcular ángulo e inclinación de la balanza
-    const angleDegrees = Phaser.Math.RadToDeg(this.beamBody.angle);
-    const absAngle = Math.abs(angleDegrees);
+    // 3. Slider Luz
+    this.sliderLController = this.setupSingleSlider(
+      startX, sliderBaseY + 116, sliderWidth,
+      '☀️ Intensidad Lumínica', '#fbbf24', 10, 100, ' Klx',
+      this.paramL,
+      (val) => { this.paramL = val; this.onParameterChanged(); }
+    );
 
-    // Stealth Assessment: Detección de oscilaciones al cruzar el eje horizontal
-    const currentSign = Math.sign(angleDegrees);
-    if (this.prevAngleSign !== 0 && currentSign !== 0 && currentSign !== this.prevAngleSign && absAngle > 0.5) {
-      this.oscillationCount++;
-    }
-    this.prevAngleSign = currentSign;
+    // Botón Confirmar Calibración
+    const btnY = startY + 185;
+    this.confirmBtn = this.add.rectangle(startX + 105, btnY, 255, 38, 0x4c1d95).setInteractive({ useHandCursor: true });
+    this.confirmBtn.setStrokeStyle(1.5, 0x8b5cf6);
 
-    this.statusText.setText(`Muestras Usadas: ${this.totalSamplesDropped}`);
+    this.confirmBtnText = this.add.text(startX + 105, btnY, 'Confirmar Calibración (Min 82%)', {
+      fontSize: '12px',
+      color: '#e9d5ff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
 
-    // Si la balanza está nivelada (ángulo menor a 2.5 grados)
-    const inBalanceZone = absAngle <= 2.5 && this.samples.length > 0;
+    this.confirmBtn.on('pointerdown', () => this.handleConfirmCycle());
+  }
 
-    if (inBalanceZone) {
-      this.deviationText.setText(`Desviación: ±${absAngle.toFixed(1)}° (En Rango Óptimo)`);
-      this.deviationText.setColor('#34d399');
+  private setupSingleSlider(
+    x: number, y: number, width: number,
+    label: string, colorHex: string,
+    min: number, max: number, unit: string,
+    initialVal: number,
+    onValueChange: (val: number) => void
+  ): { setVal: (val: number) => void } {
+    this.add.text(x - 10, y - 10, label, { fontSize: '11px', color: colorHex, fontStyle: 'bold' });
 
-      this.currentHoldSeconds += delta / 1000;
-      const progress = Math.min(1, this.currentHoldSeconds / this.targetHoldSeconds);
-      this.stabilityBarFill.width = progress * 120;
-      this.holdProgressText.setText(`Estabilidad Sostenida: ${this.currentHoldSeconds.toFixed(1)}s / 3.0s`);
+    const valText = this.add.text(x + width + 55, y + 8, `${Math.round(initialVal)}${unit}`, {
+      fontSize: '11.5px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
 
-      if (this.currentHoldSeconds >= this.targetHoldSeconds && !this.isBalanced) {
-        this.isBalanced = true;
-        this.triggerVictory();
+    // Botón Step [-]
+    const btnMinus = this.add.rectangle(x + 2, y + 8, 22, 22, 0x1e293b).setInteractive({ useHandCursor: true });
+    btnMinus.setStrokeStyle(1, 0x475569);
+    this.add.text(btnMinus.x, btnMinus.y, '−', { fontSize: '13px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+
+    // Track
+    const trackX = x + 24;
+    const trackWidth = width;
+    const trackBg = this.add.rectangle(trackX + trackWidth / 2, y + 8, trackWidth, 6, 0x1e293b);
+    trackBg.setStrokeStyle(1, 0x334155);
+
+    const fill = this.add.rectangle(trackX, y + 8, 0, 6, Phaser.Display.Color.HexStringToColor(colorHex).color);
+    fill.setOrigin(0, 0.5);
+
+    // Handle
+    const handle = this.add.circle(trackX, y + 8, 8, 0xffffff);
+    handle.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(colorHex).color);
+    handle.setInteractive({ useHandCursor: true });
+
+    // Botón Step [+]
+    const btnPlus = this.add.rectangle(trackX + trackWidth + 14, y + 8, 22, 22, 0x1e293b).setInteractive({ useHandCursor: true });
+    btnPlus.setStrokeStyle(1, 0x475569);
+    this.add.text(btnPlus.x, btnPlus.y, '+', { fontSize: '13px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+
+    const updateFromNormalized = (norm: number, isStepButton = false, triggerChange = true) => {
+      const clampedNorm = Phaser.Math.Clamp(norm, 0, 1);
+      const val = min + (clampedNorm * (max - min));
+      handle.x = trackX + (clampedNorm * trackWidth);
+      fill.width = clampedNorm * trackWidth;
+      valText.setText(`${Math.round(val)}${unit}`);
+      if (isStepButton) this.usedStepButtonsCount++;
+      if (triggerChange) onValueChange(val);
+    };
+
+    // Inicializar posición
+    const initialNorm = (initialVal - min) / (max - min);
+    updateFromNormalized(initialNorm, false, false);
+
+    // Drag del handle
+    this.input.setDraggable(handle);
+    handle.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number) => {
+      const norm = (dragX - trackX) / trackWidth;
+      updateFromNormalized(norm);
+    });
+
+    trackBg.setInteractive({ useHandCursor: true });
+    trackBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      const norm = (pointer.x - trackX) / trackWidth;
+      updateFromNormalized(norm);
+    });
+
+    btnMinus.on('pointerdown', () => {
+      const step = (max - min) * 0.05;
+      const currentNorm = (handle.x - trackX) / trackWidth;
+      const currentVal = min + (currentNorm * (max - min));
+      const newVal = Math.max(min, currentVal - step);
+      updateFromNormalized((newVal - min) / (max - min), true);
+    });
+
+    btnPlus.on('pointerdown', () => {
+      const step = (max - min) * 0.05;
+      const currentNorm = (handle.x - trackX) / trackWidth;
+      const currentVal = min + (currentNorm * (max - min));
+      const newVal = Math.min(max, currentVal + step);
+      updateFromNormalized((newVal - min) / (max - min), true);
+    });
+
+    return {
+      setVal: (v: number) => {
+        const n = (v - min) / (max - min);
+        updateFromNormalized(n, false, false);
       }
-    } else {
-      this.deviationText.setText(`Desviación: ±${absAngle.toFixed(1)}°`);
-      this.deviationText.setColor('#facc15');
+    };
+  }
 
-      // Decaimiento suave si sale de la zona
-      this.currentHoldSeconds = Math.max(0, this.currentHoldSeconds - (delta / 800));
-      const progress = Math.min(1, this.currentHoldSeconds / this.targetHoldSeconds);
-      this.stabilityBarFill.width = progress * 120;
-      this.holdProgressText.setText(`Estabilidad Sostenida: ${this.currentHoldSeconds.toFixed(1)}s / 3.0s`);
+  private onParameterChanged() {
+    this.totalAdjustments++;
+    if (!this.firstAdjustmentTimeRecorded) {
+      this.firstAdjustmentTimeRecorded = true;
+      const obsSeconds = (Date.now() - this.cycleStartTime) / 1000;
+      this.observationTimes.push(obsSeconds);
     }
+    this.renderCurves();
+  }
+
+  private loadCropCycle(cycleIdx: number) {
+    this.currentCycleIndex = cycleIdx;
+    this.cycleStartTime = Date.now();
+    this.firstAdjustmentTimeRecorded = false;
+
+    const crop = this.speciesList[cycleIdx];
+    this.cycleIndicatorText.setText(`CICLO ${crop.id} / 3`);
+    this.speciesTitleText.setText(crop.name);
+    this.speciesDescText.setText(`${crop.scientificName}\n${crop.description}`);
+
+    // Establecer parámetros iniciales alejados del óptimo para exigir calibración
+    if (cycleIdx === 0) {
+      this.paramT = 18;
+      this.paramH = 35;
+      this.paramL = 30;
+    } else if (cycleIdx === 1) {
+      this.paramT = 38;
+      this.paramH = 40;
+      this.paramL = 80;
+    } else {
+      this.paramT = 20;
+      this.paramH = 80;
+      this.paramL = 35;
+    }
+
+    this.sliderTController?.setVal(this.paramT);
+    this.sliderHController?.setVal(this.paramH);
+    this.sliderLController?.setVal(this.paramL);
+
+    this.renderCurves();
+  }
+
+  // Evaluación de la curva matemática de crecimiento en el tiempo t (0 a 10 días)
+  private evaluateCurve(crop: CropSpecies, t: number, T: number, H: number, L: number): number {
+    if (crop.curveType === 'gaussian') {
+      // Gaussian bell:
+      // T controla amplitud de pico
+      // H controla el día del pico
+      // L controla el ancho / tolerancia
+      const amplitude = (T / 35) * 85;
+      const peakDay = (H / 100) * 8 + 1; // 1 a 9
+      const spread = Math.max(0.8, (L / 100) * 3);
+      return amplitude * Math.exp(-Math.pow(t - peakDay, 2) / (2 * spread * spread));
+    } else if (crop.curveType === 'sigmoid') {
+      // Sigmoid S-Curve (meseta de biomasa):
+      const maxBiomass = (T / 25) * 88;
+      const inflectionDay = 10 - ((H / 100) * 8); // Humedad acelera maduración
+      const slope = Math.max(0.4, (100 - L) / 50);
+      return maxBiomass / (1 + Math.exp(-slope * (t - inflectionDay)));
+    } else {
+      // Bimodal (dos picos de floración diurna/nocturna):
+      const amp1 = (T / 40) * 70;
+      const amp2 = (L / 80) * 60;
+      const peak1 = (H / 100) * 4 + 1.5;
+      const peak2 = peak1 + 4.2;
+      const spread1 = 1.1;
+      const spread2 = 1.3;
+      return (amp1 * Math.exp(-Math.pow(t - peak1, 2) / (2 * spread1 * spread1))) +
+             (amp2 * Math.exp(-Math.pow(t - peak2, 2) / (2 * spread2 * spread2)));
+    }
+  }
+
+  private renderCurves() {
+    this.graphGraphics.clear();
+
+    const crop = this.speciesList[this.currentCycleIndex];
+    const steps = 60;
+    const originX = this.graphX - this.graphWidth / 2 + 35;
+    const originY = this.graphY + this.graphHeight / 2 - 25;
+    const plotWidth = this.graphWidth - 55;
+    const plotHeight = this.graphHeight - 45;
+
+    // 1. Dibujar líneas de cuadrícula tenue
+    this.graphGraphics.lineStyle(1, 0x1e293b, 0.8);
+    for (let i = 0; i <= 5; i++) {
+      const y = originY - (i / 5) * plotHeight;
+      this.graphGraphics.lineBetween(originX, y, originX + plotWidth, y);
+    }
+    for (let i = 0; i <= 10; i += 2) {
+      const x = originX + (i / 10) * plotWidth;
+      this.graphGraphics.lineBetween(x, originY, x, originY - plotHeight);
+    }
+
+    // 2. Calcular puntos y discrepancia
+    let sumSquaredError = 0;
+    const targetPoints: { x: number; y: number }[] = [];
+    const playerPoints: { x: number; y: number }[] = [];
+
+    for (let s = 0; s <= steps; s++) {
+      const t = (s / steps) * 10; // Día 0 a 10
+      const targetVal = this.evaluateCurve(crop, t, crop.targetT, crop.targetH, crop.targetL);
+      const playerVal = this.evaluateCurve(crop, t, this.paramT, this.paramH, this.paramL);
+
+      const px = originX + (s / steps) * plotWidth;
+      const pyTarget = originY - Phaser.Math.Clamp(targetVal / 100, 0, 1) * plotHeight;
+      const pyPlayer = originY - Phaser.Math.Clamp(playerVal / 100, 0, 1) * plotHeight;
+
+      targetPoints.push({ x: px, y: pyTarget });
+      playerPoints.push({ x: px, y: pyPlayer });
+
+      const diff = playerVal - targetVal;
+      sumSquaredError += diff * diff;
+    }
+
+    const rmse = Math.sqrt(sumSquaredError / (steps + 1));
+    // Precisión escalada de 0 a 100
+    const accuracy = Math.max(0, Math.min(100, Math.round((100 - rmse * 1.85) * 10) / 10));
+
+    // 3. Dibujar Banda de Tolerancia Objetivo (halo dorado)
+    this.graphGraphics.fillStyle(0xfacc15, 0.08);
+    this.graphGraphics.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const pt = targetPoints[i];
+      if (i === 0) this.graphGraphics.moveTo(pt.x, pt.y - 8);
+      else this.graphGraphics.lineTo(pt.x, pt.y - 8);
+    }
+    for (let i = steps; i >= 0; i--) {
+      const pt = targetPoints[i];
+      this.graphGraphics.lineTo(pt.x, pt.y + 8);
+    }
+    this.graphGraphics.closePath();
+    this.graphGraphics.fillPath();
+
+    // 4. Dibujar Curva Objetivo (Línea punteada dorada)
+    this.graphGraphics.lineStyle(2.5, 0xfacc15, 0.95);
+    for (let i = 0; i < steps; i += 2) {
+      const p1 = targetPoints[i];
+      const p2 = targetPoints[i + 1];
+      this.graphGraphics.lineBetween(p1.x, p1.y, p2.x, p2.y);
+    }
+
+    // 5. Dibujar Curva del Jugador (Línea continua cian con brillo)
+    const curveColor = accuracy >= 82 ? 0x22c55e : (accuracy >= 60 ? 0x38bdf8 : 0xec4899);
+    this.graphGraphics.lineStyle(3, curveColor, 1);
+    this.graphGraphics.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const pt = playerPoints[i];
+      if (i === 0) this.graphGraphics.moveTo(pt.x, pt.y);
+      else this.graphGraphics.lineTo(pt.x, pt.y);
+    }
+    this.graphGraphics.strokePath();
+
+    // 6. Actualizar métricas visuales del HUD
+    this.correlationText.setText(`Similitud R²: ${accuracy.toFixed(1)}%`);
+    this.rmseText.setText(`Error RMSE: ${rmse.toFixed(2)}`);
+
+    if (accuracy >= 82) {
+      this.correlationText.setColor('#4ade80');
+      this.confirmBtn.setFillStyle(0x166534);
+      this.confirmBtn.setStrokeStyle(1.5, 0x4ade80);
+      this.confirmBtnText.setText(`✓ Confirmar Ciclo ${this.currentCycleIndex + 1} (${accuracy.toFixed(1)}%)`);
+      this.confirmBtnText.setColor('#ffffff');
+    } else {
+      this.correlationText.setColor(accuracy >= 60 ? '#facc15' : '#f87171');
+      this.confirmBtn.setFillStyle(0x312e81);
+      this.confirmBtn.setStrokeStyle(1.5, 0x6366f1);
+      this.confirmBtnText.setText(`Calibrando... ${accuracy.toFixed(1)}% (Req: 82%)`);
+      this.confirmBtnText.setColor('#c7d2fe');
+    }
+  }
+
+  private handleConfirmCycle() {
+    const crop = this.speciesList[this.currentCycleIndex];
+    const steps = 60;
+    let sumSquaredError = 0;
+
+    for (let s = 0; s <= steps; s++) {
+      const t = (s / steps) * 10;
+      const targetVal = this.evaluateCurve(crop, t, crop.targetT, crop.targetH, crop.targetL);
+      const playerVal = this.evaluateCurve(crop, t, this.paramT, this.paramH, this.paramL);
+      const diff = playerVal - targetVal;
+      sumSquaredError += diff * diff;
+    }
+    const rmse = Math.sqrt(sumSquaredError / (steps + 1));
+    const accuracy = Math.max(0, Math.min(100, Math.round((100 - rmse * 1.85) * 10) / 10));
+
+    if (accuracy < 82) {
+      // Feedback de intento prematuro
+      this.cameras.main.shake(120, 0.005);
+      this.confirmBtnText.setText('¡Ajuste insuficiente! Requiere ≥ 82%');
+      this.time.delayedCall(1200, () => {
+        this.renderCurves();
+      });
+      return;
+    }
+
+    // Registrar resultados del ciclo
+    this.cycleAccuracies.push(accuracy);
+    this.cycleRmses.push(rmse);
+
+    // Efecto visual de calibración exitosa
+    this.createFlashEffect(this.graphX, this.graphY, 0x22c55e);
+
+    if (this.currentCycleIndex < this.speciesList.length - 1) {
+      // Pasar al siguiente ciclo
+      this.loadCropCycle(this.currentCycleIndex + 1);
+    } else {
+      // Completó los 3 ciclos
+      this.triggerVictory();
+    }
+  }
+
+  private createFlashEffect(x: number, y: number, color: number) {
+    const f = this.add.circle(x, y, 40, color, 0.7);
+    this.tweens.add({
+      targets: f,
+      scale: 3.5,
+      alpha: 0,
+      duration: 400,
+      onComplete: () => f.destroy()
+    });
   }
 
   private triggerVictory() {
     const elapsedSeconds = Math.round((Date.now() - this.startTime) / 1000);
 
-    const absAngle = Math.abs(Phaser.Math.RadToDeg(this.beamBody.angle));
-    const accuracy = Math.max(75, Math.round(100 - (absAngle * 8)));
-    const efficiencyPenalty = Math.max(0, (this.totalSamplesDropped - 5) * 3);
+    const avgAccuracy = this.cycleAccuracies.length > 0
+      ? Math.round(this.cycleAccuracies.reduce((a, b) => a + b, 0) / this.cycleAccuracies.length)
+      : 85;
 
-    const primaryDataScore = Math.max(50, Math.min(100, Math.round(
-      (accuracy * 0.7) + (30 - efficiencyPenalty)
-    )));
+    const avgRmse = this.cycleRmses.length > 0
+      ? (this.cycleRmses.reduce((a, b) => a + b, 0) / this.cycleRmses.length).toFixed(2)
+      : '2.10';
 
-    // Tarea 19: Puntuación secundaria continua para 'dev' en rango [55, 100]
+    // Puntuación primaria vocacional de Ciencia de Datos [50 - 100]
+    const primaryDataScore = Math.max(50, Math.min(100, Math.round(avgAccuracy)));
+
+    // Puntuación secundaria continua para 'dev' (modelado matemático)
     const secondaryDevScore = Math.max(55, Math.min(100, Math.round(
-      (accuracy * 0.75) + Math.max(0, 25 - efficiencyPenalty)
+      (avgAccuracy * 0.7) + (Math.min(30, this.usedStepButtonsCount * 2))
     )));
 
-    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
-    const structuredDosing = (this.massCounts[35] > 0 || this.massCounts[15] > 0);
-    const bruteForceSpam = this.massCounts[5] >= 8;
-
+    // Stealth Assessment (Landers 2024 / Shute 2011)
     const behavioralBonuses: Partial<VocationalScores> = {};
-    if (structuredDosing && !bruteForceSpam) {
-      behavioralBonuses.data = 0.8; // Razonamiento cuantitativo y estrategia combinatoria inductiva
+
+    // 1. Alta precisión analítica
+    if (avgAccuracy >= 90) {
+      behavioralBonuses.data = 0.8; // Razonamiento inductivo y ajuste empírico riguroso
     }
-    if (this.sliderAdjustmentsCount > 5) {
-      behavioralBonuses.dev = 0.5; // Calibración iterativa continua
+
+    // 2. Tiempo de observación previa a la acción (analítico vs impulsivo)
+    const avgObsTime = this.observationTimes.length > 0
+      ? this.observationTimes.reduce((a, b) => a + b, 0) / this.observationTimes.length
+      : 2;
+
+    if (avgObsTime >= 3.0) {
+      behavioralBonuses.biz = 0.5; // Planificación reflexiva y lectura previa de datos
     }
-    if (this.oscillationCount <= 4 && this.totalSamplesDropped > 0) {
-      behavioralBonuses.net = 0.5; // Control de estabilidad en sistemas dinámicos
+
+    // 3. Método de ajuste fino (uso de botones step +/- en vez de arrastre brusco)
+    if (this.usedStepButtonsCount >= 8) {
+      behavioralBonuses.dev = 0.5; // Calibración sistemática e incremental
     }
 
     const metrics: MinigameMetrics = {
@@ -435,15 +640,15 @@ export class DataMinigameScene extends Phaser.Scene {
       secondaryScore: secondaryDevScore,
       behavioralBonuses,
       details: {
-        'Precisión de Balanza': `${accuracy}%`,
-        'Margen de Error Residual': `±${absAngle.toFixed(2)}°`,
-        'Muestras Dosificadas': `${this.totalSamplesDropped}`,
-        'Estrategia Dosificación': bruteForceSpam ? 'Fuerza Bruta (+5)' : 'Combinatoria Óptima',
-        'Oscilaciones Previas': `${this.oscillationCount}`,
-        'Ajustes Contrapeso': `${this.sliderAdjustmentsCount}`,
-        'Tiempo de Estabilización': `${elapsedSeconds} seg`
+        'Precisión Promedio': `${avgAccuracy}%`,
+        'Ciclos Completados': `${this.speciesList.length} / ${this.speciesList.length}`,
+        'Error Residual RMSE': `${avgRmse}`,
+        'Ajustes Totales': `${this.totalAdjustments}`,
+        'Calibraciones Finas': `${this.usedStepButtonsCount}`,
+        'Tiempo de Observación': `${avgObsTime.toFixed(1)}s prom`,
+        'Tiempo de Calibración': `${elapsedSeconds} seg`
       },
-      feedbackSummary: `Equilibrio analítico perfecto. Lograste estabilizar la balanza bio-sensorial en ${this.targetHoldSeconds}s con un margen de error menor al 2%.`
+      feedbackSummary: `Análisis de bio-patrones completado con éxito. Lograste un promedio de ajuste del ${avgAccuracy}% (RMSE ${avgRmse}) en los 3 ciclos de incubación orbital.`
     };
 
     this.showCompletionModal(metrics);
@@ -457,7 +662,7 @@ export class DataMinigameScene extends Phaser.Scene {
     const mBg = this.add.rectangle(0, 0, 520, 320, 0x090d16, 0.98);
     mBg.setStrokeStyle(2, 0x8b5cf6);
 
-    const title = this.add.text(0, -115, '📊 ¡EQUILIBRIO BIO-SENSORIAL ESTABLECIDO!', {
+    const title = this.add.text(0, -115, '📊 ¡PATRONES DE CULTIVO CALIBRADOS!', {
       fontSize: '17px',
       color: '#c084fc',
       fontStyle: 'bold',
@@ -500,8 +705,9 @@ export class DataMinigameScene extends Phaser.Scene {
     const scoreBadge = this.completedModal.getByName('scoreBadge') as Phaser.GameObjects.Text;
 
     detailsText.setText(
-      `Precisión Analítica: ${metrics.details['Precisión de Balanza']} | Error Residual: ${metrics.details['Margen de Error Residual']}\n` +
-      `Muestras Utilizadas: ${metrics.details['Muestras Dosificadas']}\n\n` +
+      `Precisión de Ajuste: ${metrics.details['Precisión Promedio']} | Error RMSE: ${metrics.details['Error Residual RMSE']}\n` +
+      `Ciclos Completados: ${metrics.details['Ciclos Completados']} | Ajustes Totales: ${metrics.details['Ajustes Totales']}\n` +
+      `Observación Previa: ${metrics.details['Tiempo de Observación']} | Tiempo Total: ${metrics.details['Tiempo de Calibración']}\n\n` +
       `${metrics.feedbackSummary}`
     );
 
@@ -514,7 +720,7 @@ export class DataMinigameScene extends Phaser.Scene {
     });
   }
 
-  private closeMinigame(metrics?: MinigameMetrics) {
+  public closeMinigame(metrics?: MinigameMetrics) {
     if (metrics && this.onCompleteCallback) {
       this.onCompleteCallback(metrics);
     } else if (!metrics && this.onCancelCallback) {

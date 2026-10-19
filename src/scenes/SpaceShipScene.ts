@@ -571,19 +571,19 @@ export class SpaceShipScene extends Phaser.Scene {
         const minigameMap: { [id: string]: { scene: string; intro: string } } = {
           station_net: {
             scene: 'NetworkMinigameScene',
-            intro: `${station.dilemmaText}\n\n📡 Torre de antenas: rutea los cables elásticos entre terminales para restablecer el enlace con baja latencia.`
+            intro: `${station.dilemmaText}\n\n📡 Torre de antenas: rutea las señales a través de la matriz de nodos ópticos evitando la congestión de canal e interferencias.`
           },
           station_sec: {
             scene: 'SecurityMinigameScene',
-            intro: `${station.dilemmaText}\n\n🛡️ Puesto de vigilancia: manipula las compuertas deflectoras para desviar el malware a cuarentena y proteger la bóveda.`
+            intro: `${station.dilemmaText}\n\n🛡️ Puesto de vigilancia: manipula el deflector central de flujo para desviar el malware a cuarentena, proteger la bóveda y escanear paquetes cifrados.`
           },
           station_dev: {
             scene: 'RoboticsMinigameScene',
-            intro: `${station.dilemmaText}\n\n🤖 Bahía de ensamblaje: utiliza el brazo articulado con la pinza magnética para encajar los componentes en el chasis del robot asistente.`
+            intro: `${station.dilemmaText}\n\n🤖 Bahía de ensamblaje: programa las secuencias algorítmicas del brazo articulado IK para encajar los componentes en el chasis del robot asistente.`
           },
           station_data: {
             scene: 'DataMinigameScene',
-            intro: `${station.dilemmaText}\n\n🌱 Laboratorio de cultivos: equilibra la balanza analítica dosificando nutrientes para estabilizar los bio-sensores.`
+            intro: `${station.dilemmaText}\n\n🌱 Laboratorio de cultivos: modula los sensores ambientales (temperatura, humedad y luz) para calibrar las curvas de crecimiento de las especies vegetales.`
           },
           station_biz: {
             scene: 'BizMinigameScene',

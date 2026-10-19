@@ -1,6 +1,8 @@
 import * as Phaser from 'phaser';
 import { MinigameMetrics, VocationalScores } from '../../types/vocational';
 
+export type RobotInstruction = 'TO_PART' | 'LOWER' | 'GRAB' | 'RAISE' | 'TO_SLOT' | 'RELEASE' | 'WAIT';
+
 interface RobotPart {
   id: number;
   name: string;
@@ -33,8 +35,8 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   // Cinemática inversa (2-Bone IK)
   private upperArmLength = 138;
   private forearmLength = 138;
-  private targetClawX = 512;
-  private targetClawY = 340;
+  public targetClawX = 512;
+  public targetClawY = 340;
   private clawX = 512;
   private clawY = 340;
   private elbowX = 512;
@@ -45,21 +47,29 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   // Cuerpo físico de la pinza/imán
   private clawBody!: MatterJS.BodyType;
   private armGraphics!: Phaser.GameObjects.Graphics;
-  private fxGraphics!: Phaser.GameObjects.Graphics;
 
   // Electroimán y agarre
   private isMagnetActive = false;
-  private isClickLocked = false;
-  private heldPart: RobotPart | null = null;
+  public isClickLocked = false;
+  public heldPart: RobotPart | null = null;
   private pointerDownTime = 0;
   private pointerDownPos = { x: 0, y: 0 };
 
   // Piezas y Chasis
-  private parts: RobotPart[] = [];
+  public parts: RobotPart[] = [];
   private installedOrder: number[] = [];
   private totalParts = 3;
   private roughMovesCount = 0;
   private startTime = 0;
+
+  // Programador visual de secuencias
+  private programmedSequence: RobotInstruction[] = [];
+  private isExecutingProgram = false;
+  private programRunAttempts = 0;
+  private totalInstructionsExecuted = 0;
+  private sequenceSlotContainers: Phaser.GameObjects.Container[] = [];
+  private executeBtn!: Phaser.GameObjects.Rectangle;
+  private executeBtnText!: Phaser.GameObjects.Text;
 
   // Métricas de Stealth Assessment (Landers 2024 / Shute 2011)
   private firstGrabDelaySec = 0;
@@ -72,7 +82,7 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   private accuracyText!: Phaser.GameObjects.Text;
   private sequenceText!: Phaser.GameObjects.Text;
   private magnetStatusText!: Phaser.GameObjects.Text;
-  private completedModal!: Phaser.GameObjects.Container;
+  public completedModal!: Phaser.GameObjects.Container;
 
   // Callbacks
   private onCompleteCallback?: (metrics: MinigameMetrics) => void;
@@ -104,6 +114,10 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     this.regrabsCount = 0;
     this.failedDropsCount = 0;
     this.partGrabCounts = {};
+    this.programmedSequence = [];
+    this.isExecutingProgram = false;
+    this.programRunAttempts = 0;
+    this.totalInstructionsExecuted = 0;
     this.trolleyX = this.panelX;
     this.targetClawX = this.panelX;
     this.targetClawY = this.panelY + 40;
@@ -126,18 +140,18 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     frame.setStrokeStyle(3, 0x3b82f6);
 
     // Cabecera
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '🤖 BAHÍA DE ENSAMBLAJE // MONTAJE CINEMÁTICO DE PRECISIÓN', {
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 25, '🤖 BAHÍA DE ENSAMBLAJE // PROGRAMADOR DE SECUENCIAS DEL ROBOT', {
       fontSize: '17px',
       color: '#60a5fa',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
-    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 50, 'Guía el brazo articulado con el cursor para transportar los componentes al chasis del robot asistente.\nMantén pulsado el ratón (o haz clic) para activar el electroimán y encajar las piezas en sus ranuras.', {
-      fontSize: '12px',
+    this.add.text(this.panelX - this.panelWidth / 2 + 30, this.panelY - this.panelHeight / 2 + 48, 'Arma la secuencia de instrucciones para comandar el brazo articulado IK o contrólalo manualmente.\nPulsa [EJECUTAR PROGRAMA] para compilar y ensamblar los componentes del robot asistente.', {
+      fontSize: '11.5px',
       color: '#94a3b8',
       fontFamily: 'sans-serif',
-      lineSpacing: 4
+      lineSpacing: 3
     });
 
     // Botón Salir
@@ -149,8 +163,8 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     // 3. Establecer límites físicos
     const minX = this.panelX - this.panelWidth / 2 + 20;
     const maxX = this.panelX + this.panelWidth / 2 - 20;
-    const minY = this.panelY - this.panelHeight / 2 + 100;
-    const maxY = this.panelY + this.panelHeight / 2 - 60;
+    const minY = this.panelY - this.panelHeight / 2 + 90;
+    const maxY = this.panelY + this.panelHeight / 2 - 20;
     this.matter.world.setBounds(minX, minY, maxX - minX, maxY - minY, 32, true, true, true, true);
 
     // 4. Mesa de trabajo y Soporte del chasis
@@ -158,40 +172,42 @@ export class RoboticsMinigameScene extends Phaser.Scene {
 
     // 5. Crear el brazo cinemático y gráficos
     this.armGraphics = this.add.graphics();
-    this.fxGraphics = this.add.graphics();
     this.setupRoboticArm();
 
     // 6. Crear las piezas físicas y slots
     this.setupPartsAndSlots();
 
-    // 7. HUD
+    // 7. Consola de programación por bloques
+    this.setupProgrammerConsole();
+
+    // 8. HUD
     this.setupHUD();
 
-    // 8. Controles con puntero
+    // 9. Controles con puntero
     this.setupInputHandlers();
 
-    // 9. Modal de finalización
+    // 10. Modal de finalización
     this.createCompletionModal();
   }
 
   private setupWorkbench() {
-    const tableY = this.panelY + 140;
+    const tableY = this.panelY + 115;
 
     // Mesa izquierda (Banco de Piezas)
-    const tableLeft = this.add.rectangle(this.panelX - 240, tableY, 260, 24, 0x1e293b);
+    const tableLeft = this.add.rectangle(this.panelX - 240, tableY, 260, 20, 0x1e293b);
     tableLeft.setStrokeStyle(2, 0x475569);
-    this.matter.add.rectangle(tableLeft.x, tableLeft.y, 260, 24, { isStatic: true, restitution: 0.1 });
-    this.add.text(tableLeft.x, tableLeft.y + 24, 'BANCO DE PIEZAS', { fontSize: '10px', color: '#94a3b8', fontStyle: 'bold' }).setOrigin(0.5);
+    this.matter.add.rectangle(tableLeft.x, tableLeft.y, 260, 20, { isStatic: true, restitution: 0.1 });
+    this.add.text(tableLeft.x, tableLeft.y + 18, 'BANCO DE PIEZAS', { fontSize: '10px', color: '#94a3b8', fontStyle: 'bold' }).setOrigin(0.5);
 
     // Mesa derecha (Chasis del robot)
-    const tableRight = this.add.rectangle(this.panelX + 220, tableY, 280, 24, 0x1e293b);
+    const tableRight = this.add.rectangle(this.panelX + 220, tableY, 280, 20, 0x1e293b);
     tableRight.setStrokeStyle(2, 0x3b82f6);
-    this.matter.add.rectangle(tableRight.x, tableRight.y, 280, 24, { isStatic: true, restitution: 0.1 });
+    this.matter.add.rectangle(tableRight.x, tableRight.y, 280, 20, { isStatic: true, restitution: 0.1 });
 
     // Dibujar chasis del robot asistente
-    const robotChassis = this.add.rectangle(this.panelX + 220, tableY - 60, 180, 95, 0x0f172a);
+    const robotChassis = this.add.rectangle(this.panelX + 220, tableY - 45, 180, 70, 0x0f172a);
     robotChassis.setStrokeStyle(2, 0x60a5fa);
-    this.add.text(this.panelX + 220, tableY - 118, '🤖 ROBOT ASISTENTE M-4', { fontSize: '11px', color: '#93c5fd', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(this.panelX + 220, tableY - 90, '🤖 ROBOT ASISTENTE M-4', { fontSize: '11px', color: '#93c5fd', fontStyle: 'bold' }).setOrigin(0.5);
   }
 
   private setupRoboticArm() {
@@ -322,45 +338,248 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     });
   }
 
+  private setupProgrammerConsole() {
+    const consoleY = this.panelY + 162;
+
+    // Caja de consola
+    const bg = this.add.rectangle(this.panelX, consoleY, 800, 84, 0x090d16, 0.9);
+    bg.setStrokeStyle(1.5, 0x334155);
+
+    // Paleta de Instrucciones
+    const blockDefs: { type: RobotInstruction; label: string; color: string; colorNum: number }[] = [
+      { type: 'TO_PART', label: '◄ Ir a Pieza', color: '#38bdf8', colorNum: 0x0284c7 },
+      { type: 'LOWER', label: '▼ Bajar', color: '#60a5fa', colorNum: 0x2563eb },
+      { type: 'GRAB', label: '🧲 Agarrar', color: '#c084fc', colorNum: 0x7c3aed },
+      { type: 'RAISE', label: '▲ Subir', color: '#60a5fa', colorNum: 0x2563eb },
+      { type: 'TO_SLOT', label: '► Ir a Chasis', color: '#34d399', colorNum: 0x059669 },
+      { type: 'RELEASE', label: '⚡ Soltar', color: '#f59e0b', colorNum: 0xd97706 },
+      { type: 'WAIT', label: '⏱ Esperar', color: '#94a3b8', colorNum: 0x475569 }
+    ];
+
+    const paletteY = consoleY - 24;
+    blockDefs.forEach((b, idx) => {
+      const bx = this.panelX - 340 + (idx * 86);
+      const btn = this.add.rectangle(bx, paletteY, 80, 24, 0x1e293b).setInteractive({ useHandCursor: true });
+      btn.setStrokeStyle(1, b.colorNum);
+      this.add.text(bx, paletteY, b.label, { fontSize: '10px', color: b.color, fontStyle: 'bold' }).setOrigin(0.5);
+
+      btn.on('pointerdown', () => this.appendInstruction(b.type));
+    });
+
+    // Botones de ejecución y reset
+    const actionY = consoleY + 18;
+    this.executeBtn = this.add.rectangle(this.panelX + 290, actionY, 150, 28, 0x166534).setInteractive({ useHandCursor: true });
+    this.executeBtn.setStrokeStyle(1.5, 0x22c55e);
+    this.executeBtnText = this.add.text(this.executeBtn.x, actionY, '▶ EJECUTAR CÓDIGO', { fontSize: '11px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+    this.executeBtn.on('pointerdown', () => this.executeProgrammedSequence());
+
+    const clearBtn = this.add.rectangle(this.panelX + 180, actionY, 60, 28, 0x1e293b).setInteractive({ useHandCursor: true });
+    clearBtn.setStrokeStyle(1, 0xef4444);
+    this.add.text(clearBtn.x, actionY, '↺ Borrar', { fontSize: '10.5px', color: '#fca5a5', fontStyle: 'bold' }).setOrigin(0.5);
+    clearBtn.on('pointerdown', () => this.clearProgrammedSequence());
+
+    // Ranuras visuales de la cinta de programa (8 slots)
+    const tapeStartX = this.panelX - 350;
+    const slotSpacing = 62;
+    for (let i = 0; i < 8; i++) {
+      const sx = tapeStartX + (i * slotSpacing);
+      const c = this.add.container(sx, actionY);
+
+      const sBg = this.add.rectangle(0, 0, 58, 26, 0x1e293b);
+      sBg.setStrokeStyle(1, 0x475569);
+      sBg.setInteractive({ useHandCursor: true });
+
+      const sTxt = this.add.text(0, 0, `${i + 1}`, { fontSize: '9.5px', color: '#64748b' }).setOrigin(0.5);
+
+      c.add([sBg, sTxt]);
+
+      const slotIdx = i;
+      sBg.on('pointerdown', () => this.removeInstructionAt(slotIdx));
+
+      this.sequenceSlotContainers.push(c);
+    }
+  }
+
+  private appendInstruction(inst: RobotInstruction) {
+    if (this.isExecutingProgram) return;
+    if (this.programmedSequence.length >= 8) {
+      this.cameras.main.shake(100, 0.003);
+      return;
+    }
+
+    this.programmedSequence.push(inst);
+    this.updateProgramTapeUI();
+  }
+
+  private removeInstructionAt(index: number) {
+    if (this.isExecutingProgram) return;
+    if (index < this.programmedSequence.length) {
+      this.programmedSequence.splice(index, 1);
+      this.updateProgramTapeUI();
+    }
+  }
+
+  private clearProgrammedSequence() {
+    if (this.isExecutingProgram) return;
+    this.programmedSequence = [];
+    this.updateProgramTapeUI();
+  }
+
+  private updateProgramTapeUI(executingIndex = -1) {
+    const labelMap: { [key in RobotInstruction]: { txt: string; color: number } } = {
+      TO_PART: { txt: '◄ Pieza', color: 0x0284c7 },
+      LOWER: { txt: '▼ Bajar', color: 0x2563eb },
+      GRAB: { txt: '🧲 Agarrar', color: 0x7c3aed },
+      RAISE: { txt: '▲ Subir', color: 0x2563eb },
+      TO_SLOT: { txt: '► Chasis', color: 0x059669 },
+      RELEASE: { txt: '⚡ Soltar', color: 0xd97706 },
+      WAIT: { txt: '⏱ Esperar', color: 0x475569 }
+    };
+
+    for (let i = 0; i < 8; i++) {
+      const c = this.sequenceSlotContainers[i];
+      const sBg = c.list[0] as Phaser.GameObjects.Rectangle;
+      const sTxt = c.list[1] as Phaser.GameObjects.Text;
+
+      if (i < this.programmedSequence.length) {
+        const inst = this.programmedSequence[i];
+        const info = labelMap[inst];
+        sBg.setFillStyle(info.color, 0.9);
+        sTxt.setText(info.txt);
+        sTxt.setColor('#ffffff');
+
+        if (i === executingIndex) {
+          sBg.setStrokeStyle(2.5, 0xfacc15);
+        } else {
+          sBg.setStrokeStyle(1, 0xffffff);
+        }
+      } else {
+        sBg.setFillStyle(0x1e293b, 0.8);
+        sBg.setStrokeStyle(1, 0x475569);
+        sTxt.setText(`${i + 1}`);
+        sTxt.setColor('#64748b');
+      }
+    }
+  }
+
+  private executeProgrammedSequence() {
+    if (this.isExecutingProgram) return;
+    if (this.programmedSequence.length === 0) {
+      this.cameras.main.shake(100, 0.004);
+      return;
+    }
+
+    this.isExecutingProgram = true;
+    this.programRunAttempts++;
+    this.executeBtn.setFillStyle(0x854d0e);
+    this.executeBtnText.setText('⚙ EJECUTANDO...');
+
+    let stepIndex = 0;
+
+    const stepInterval = () => {
+      if (stepIndex >= this.programmedSequence.length) {
+        // Fin de la secuencia
+        this.isExecutingProgram = false;
+        this.updateProgramTapeUI(-1);
+        this.executeBtn.setFillStyle(0x166534);
+        this.executeBtnText.setText('▶ EJECUTAR CÓDIGO');
+        return;
+      }
+
+      const inst = this.programmedSequence[stepIndex];
+      this.updateProgramTapeUI(stepIndex);
+      this.totalInstructionsExecuted++;
+
+      // Buscar siguiente pieza no instalada
+      const targetPart = this.parts.find(p => !p.installed);
+
+      switch (inst) {
+        case 'TO_PART':
+          if (targetPart) {
+            this.targetClawX = targetPart.body.position.x;
+            this.targetClawY = 260;
+          }
+          break;
+        case 'LOWER':
+          if (this.heldPart) {
+            this.targetClawY = this.heldPart.slotY;
+          } else if (targetPart) {
+            this.targetClawY = targetPart.body.position.y - 10;
+          } else {
+            this.targetClawY = 390;
+          }
+          break;
+        case 'GRAB':
+          if (!this.heldPart && targetPart) {
+            this.grabPart(targetPart);
+            this.isClickLocked = true;
+          }
+          break;
+        case 'RAISE':
+          this.targetClawY = 260;
+          break;
+        case 'TO_SLOT':
+          if (this.heldPart) {
+            this.targetClawX = this.heldPart.slotX;
+            this.targetClawY = 260;
+          }
+          break;
+        case 'RELEASE':
+          if (this.heldPart) {
+            this.releasePart();
+            this.isClickLocked = false;
+            this.isMagnetActive = false;
+          }
+          break;
+        case 'WAIT':
+          // Pausa de sincronización
+          break;
+      }
+
+      stepIndex++;
+      this.time.delayedCall(650, stepInterval);
+    };
+
+    stepInterval();
+  }
+
   private drawPartGraphic(g: Phaser.GameObjects.Graphics, width: number, height: number, color: number) {
     g.clear();
     g.fillStyle(color, 1);
     g.fillRoundedRect(-width / 2, -height / 2, width, height, 4);
     g.lineStyle(1.5, 0xffffff, 0.9);
     g.strokeRoundedRect(-width / 2, -height / 2, width, height, 4);
-
-    // Detalle estético interior de componente electrónico
     g.lineStyle(1, 0xffffff, 0.35);
     g.strokeCircle(0, 0, Math.min(width, height) / 4);
   }
 
   private setupHUD() {
-    const barY = this.panelY + this.panelHeight / 2 - 35;
+    const barY = this.panelY + this.panelHeight / 2 - 18;
     const startX = this.panelX - this.panelWidth / 2 + 40;
 
     this.statusText = this.add.text(startX, barY, 'Instaladas: 0 / 3', {
-      fontSize: '13px',
+      fontSize: '11.5px',
       color: '#facc15',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
     this.accuracyText = this.add.text(startX + 180, barY, 'Precisión de Encaje: --', {
-      fontSize: '13px',
+      fontSize: '11.5px',
       color: '#60a5fa',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
     this.sequenceText = this.add.text(startX + 400, barY, 'Secuencia Lógica: Correcta', {
-      fontSize: '13px',
+      fontSize: '11.5px',
       color: '#34d399',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     });
 
     this.magnetStatusText = this.add.text(startX + 620, barY, 'Imán: Inactivo', {
-      fontSize: '13px',
+      fontSize: '11.5px',
       color: '#94a3b8',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
@@ -369,20 +588,21 @@ export class RoboticsMinigameScene extends Phaser.Scene {
 
   private setupInputHandlers() {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      // Movimiento libre en la bahía de ensamblaje
+      if (this.isExecutingProgram) return;
+
       const clampedX = Phaser.Math.Clamp(pointer.x, this.panelX - this.panelWidth / 2 + 60, this.panelX + this.panelWidth / 2 - 60);
-      const clampedY = Phaser.Math.Clamp(pointer.y, this.panelY - 60, this.panelY + 135);
+      const clampedY = Phaser.Math.Clamp(pointer.y, this.panelY - 60, this.panelY + 125);
       this.targetClawX = clampedX;
       this.targetClawY = clampedY;
 
-      // Si el imán está activo (arrastrando) y no lleva pieza, comprobar si toca una pieza
       if (this.isMagnetActive && !this.heldPart) {
         this.checkAndGrabPart(pointer.x, pointer.y);
       }
     });
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      // Si ya teníamos una pieza sostenida mediante modo clic/tap, este clic la suelta
+      if (this.isExecutingProgram) return;
+
       if (this.heldPart && this.isClickLocked) {
         this.releasePart();
         this.isClickLocked = false;
@@ -395,7 +615,6 @@ export class RoboticsMinigameScene extends Phaser.Scene {
       this.pointerDownPos = { x: pointer.x, y: pointer.y };
       this.isMagnetActive = true;
 
-      // Intentar enganchar pieza cercana o sobre la que se hizo clic
       if (!this.heldPart) {
         this.checkAndGrabPart(pointer.x, pointer.y);
       }
@@ -403,17 +622,17 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (this.isExecutingProgram) return;
+
       const duration = Date.now() - this.pointerDownTime;
       const distMoved = Phaser.Math.Distance.Between(pointer.x, pointer.y, this.pointerDownPos.x, this.pointerDownPos.y);
 
       if (this.heldPart) {
-        // Si arrastró el ratón (más de 220ms o más de 12px de recorrido), se suelta al levantar el botón
         if (duration > 220 || distMoved > 12) {
           this.releasePart();
           this.isClickLocked = false;
           this.isMagnetActive = false;
         } else {
-          // Fue un clic rápido: dejarla agarrada (modo sticky) para facilitar la accesibilidad
           this.isClickLocked = true;
           this.isMagnetActive = true;
         }
@@ -443,22 +662,19 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     }
   }
 
-  private grabPart(part: RobotPart) {
+  public grabPart(part: RobotPart) {
     this.heldPart = part;
     this.isMagnetActive = true;
 
-    // Stealth Assessment: Tiempo antes del primer agarre (planificación vs impulsividad)
     if (this.firstGrabDelaySec === 0) {
       this.firstGrabDelaySec = Math.max(0.1, (Date.now() - this.startTime) / 1000);
     }
 
-    // Stealth Assessment: Conteo de re-agarres (iteración y tolerancia al fallo)
     this.partGrabCounts[part.id] = (this.partGrabCounts[part.id] || 0) + 1;
     if (this.partGrabCounts[part.id] > 1) {
       this.regrabsCount++;
     }
 
-    // Destello de agarre magnético
     const f = this.add.circle(part.body.position.x, part.body.position.y, 22, 0x38bdf8, 0.8);
     this.tweens.add({
       targets: f,
@@ -471,21 +687,18 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     this.updateHUDText();
   }
 
-  private releasePart() {
+  public releasePart() {
     if (!this.heldPart) return;
 
     const part = this.heldPart;
     this.heldPart = null;
 
-    // Verificar si se soltó cerca de su ranura en el chasis (rango de 50px)
     const distToSlot = Phaser.Math.Distance.Between(part.body.position.x, part.body.position.y, part.slotX, part.slotY);
 
     if (distToSlot <= 50) {
       this.snapPartIntoSlot(part, distToSlot);
     } else {
-      // Stealth Assessment: Caída fallida fuera de la ranura
       this.failedDropsCount++;
-      // Dejar caer libremente sobre la mesa con gravedad
       this.matter.body.setStatic(part.body, false);
       this.matter.body.setVelocity(part.body, { x: 0, y: 1 });
     }
@@ -498,16 +711,13 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     part.hitZone.disableInteractive();
     this.installedOrder.push(part.expectedOrder);
 
-    // Precisión de encaje
     const accuracy = Math.max(70, Math.round(100 - (distToSlot * 0.6)));
     part.accuracy = accuracy;
 
-    // Fijar sólidamente en el socket receptor
     this.matter.body.setPosition(part.body, { x: part.slotX, y: part.slotY });
     this.matter.body.setAngle(part.body, 0);
     this.matter.body.setStatic(part.body, true);
 
-    // Destello de montaje exitoso
     const f = this.add.circle(part.slotX, part.slotY, 26, part.color, 0.85);
     this.tweens.add({
       targets: f,
@@ -523,7 +733,6 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     const avgAcc = Math.round(this.parts.filter(p => p.installed).reduce((acc, p) => acc + p.accuracy, 0) / installedCount);
     this.accuracyText.setText(`Precisión de Encaje: ${avgAcc}%`);
 
-    // Verificar si el orden es correcto (1 -> 2 -> 3)
     const isSequential = this.installedOrder.every((val, idx) => val === idx + 1);
     if (!isSequential) {
       this.sequenceText.setText('Secuencia Lógica: Desordenada');
@@ -548,7 +757,7 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   }
 
   // Cinemática Inversa Analítica de 2 Eslabones (2-Bone IK)
-  private solveIK(targetX: number, targetY: number): { elbow: Phaser.Math.Vector2; claw: Phaser.Math.Vector2 } {
+  public solveIK(targetX: number, targetY: number): { elbow: Phaser.Math.Vector2; claw: Phaser.Math.Vector2 } {
     const shoulderX = this.trolleyX;
     const shoulderY = this.railY + 16;
 
@@ -579,15 +788,11 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     }
 
     const angleToTarget = Math.atan2(dy, dx);
-
-    // Ley de cosenos: L2^2 = L1^2 + clampedDist^2 - 2 * L1 * clampedDist * cos(alpha)
     const cosAlpha = (L1 * L1 + clampedDist * clampedDist - L2 * L2) / (2 * L1 * clampedDist);
     const clampedCosAlpha = Phaser.Math.Clamp(cosAlpha, -1, 1);
     const alpha = Math.acos(clampedCosAlpha);
 
-    // Orientación del codo
     const theta1 = angleToTarget - alpha;
-
     const elbowX = shoulderX + L1 * Math.cos(theta1);
     const elbowY = shoulderY + L1 * Math.sin(theta1);
 
@@ -598,212 +803,100 @@ export class RoboticsMinigameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    // 1. El pórtico superior (trolley) sigue suavemente la posición X objetivo
-    const targetTrolleyX = Phaser.Math.Clamp(this.targetClawX, this.trolleyMinX, this.trolleyMaxX);
-    const lerpFactor = Math.min(1, (delta / 1000) * 14);
-    this.trolleyX = Phaser.Math.Linear(this.trolleyX, targetTrolleyX, lerpFactor);
+    const targetTrolley = Phaser.Math.Clamp(this.targetClawX, this.trolleyMinX, this.trolleyMaxX);
+    const lerpTrolley = Phaser.Math.Clamp((delta / 1000) * 8.5, 0.05, 0.45);
+    this.trolleyX = Phaser.Math.Linear(this.trolleyX, targetTrolley, lerpTrolley);
 
-    // 2. Resolver cinemática inversa del brazo
     const ik = this.solveIK(this.targetClawX, this.targetClawY);
-    this.clawX = ik.claw.x;
-    this.clawY = ik.claw.y;
-    this.elbowX = ik.elbow.x;
-    this.elbowY = ik.elbow.y;
 
-    // Sincronizar cuerpo físico de la pinza
-    this.matter.body.setPosition(this.clawBody, { x: this.clawX, y: this.clawY });
+    const lerpArm = Phaser.Math.Clamp((delta / 1000) * 12.0, 0.08, 0.65);
+    this.elbowX = Phaser.Math.Linear(this.elbowX, ik.elbow.x, lerpArm);
+    this.elbowY = Phaser.Math.Linear(this.elbowY, ik.elbow.y, lerpArm);
+    this.clawX = Phaser.Math.Linear(this.clawX, ik.claw.x, lerpArm);
+    this.clawY = Phaser.Math.Linear(this.clawY, ik.claw.y, lerpArm);
 
-    // Detección de movimientos bruscos para cálculo de destreza cinemática
-    const clawSpeed = Phaser.Math.Distance.Between(this.clawX, this.clawY, this.prevClawX, this.prevClawY);
-    if (clawSpeed > 24) {
-      this.roughMovesCount += 0.05;
+    if (this.clawBody) {
+      this.matter.body.setPosition(this.clawBody, { x: this.clawX, y: this.clawY });
+    }
+
+    if (this.heldPart) {
+      this.matter.body.setPosition(this.heldPart.body, { x: this.clawX, y: this.clawY + 16 });
+      this.matter.body.setAngle(this.heldPart.body, 0);
+      this.matter.body.setVelocity(this.heldPart.body, { x: 0, y: 0 });
+    }
+
+    for (const part of this.parts) {
+      part.graphic.setPosition(part.body.position.x, part.body.position.y);
+      part.graphic.setRotation(part.body.angle);
+      part.hitZone.setPosition(part.body.position.x, part.body.position.y);
+    }
+
+    const clawSpeed = Phaser.Math.Distance.Between(this.clawX, this.clawY, this.prevClawX, this.prevClawY) / (delta / 1000);
+    if (clawSpeed > 800) {
+      this.roughMovesCount += delta / 1000;
     }
     this.prevClawX = this.clawX;
     this.prevClawY = this.clawY;
 
-    // 3. Si hay una pieza sujetada por el imán, transportarla rígidamente con la pinza
-    if (this.heldPart) {
-      const part = this.heldPart;
-      const holdY = this.clawY + part.height / 2 + 10;
-      this.matter.body.setPosition(part.body, { x: this.clawX, y: holdY });
-      this.matter.body.setVelocity(part.body, { x: 0, y: 0 });
-      this.matter.body.setAngle(part.body, 0);
-      this.matter.body.setAngularVelocity(part.body, 0);
-    }
-
-    // 4. Sincronizar gráficos de las piezas
-    for (const p of this.parts) {
-      p.graphic.setPosition(p.body.position.x, p.body.position.y);
-      p.graphic.setRotation(p.body.angle);
-      p.hitZone.setPosition(p.body.position.x, p.body.position.y);
-    }
-
-    // 5. Renderizado visual del pórtico, riel, articulaciones y electroimán
-    this.drawArmAndGantry();
+    this.renderRoboticArmVisuals();
   }
 
-  private drawArmAndGantry() {
+  private renderRoboticArmVisuals() {
     this.armGraphics.clear();
-    this.fxGraphics.clear();
+    const shoulderX = this.trolleyX;
+    const shoulderY = this.railY + 16;
 
-    const railY = this.railY;
-    const railMinX = this.panelX - 330;
-    const railMaxX = this.panelX + 330;
-    const sx = this.trolleyX;
-    const sy = railY + 16;
-    const ex = this.elbowX;
-    const ey = this.elbowY;
-    const cx = this.clawX;
-    const cy = this.clawY;
+    // Riel y Carro
+    this.armGraphics.fillStyle(0x334155, 1);
+    this.armGraphics.fillRect(this.panelX - 280, this.railY - 6, 560, 12);
+    this.armGraphics.lineStyle(1.5, 0x64748b, 0.9);
+    this.armGraphics.strokeRect(this.panelX - 280, this.railY - 6, 560, 12);
 
-    // A. Riel Horizontal Superior (Gantry Track)
-    // Soportes de fijación al techo
-    const bracketXPositions = [this.panelX - 260, this.panelX - 90, this.panelX + 90, this.panelX + 260];
-    this.armGraphics.lineStyle(3, 0x1e293b, 1);
-    bracketXPositions.forEach(bx => {
-      this.armGraphics.lineBetween(bx, this.panelY - this.panelHeight / 2 + 80, bx, railY - 10);
-      this.armGraphics.fillStyle(0x334155, 1);
-      this.armGraphics.fillCircle(bx, railY - 10, 4);
-    });
-
-    // Viga principal del riel
-    this.armGraphics.fillStyle(0x0f172a, 1);
-    this.armGraphics.fillRect(railMinX, railY - 10, railMaxX - railMinX, 20);
-    this.armGraphics.lineStyle(2, 0x334155, 1);
-    this.armGraphics.strokeRect(railMinX, railY - 10, railMaxX - railMinX, 20);
-
-    // Guías metálicas cromadas del riel
-    this.armGraphics.lineStyle(3, 0x475569, 1);
-    this.armGraphics.lineBetween(railMinX + 5, railY - 6, railMaxX - 5, railY - 6);
-    this.armGraphics.lineBetween(railMinX + 5, railY + 6, railMaxX - 5, railY + 6);
-    this.armGraphics.lineStyle(1.5, 0x94a3b8, 0.7);
-    this.armGraphics.lineBetween(railMinX + 8, railY - 6, railMaxX - 8, railY - 6);
-
-    // Topes de seguridad laterales
-    this.armGraphics.fillStyle(0xef4444, 1);
-    this.armGraphics.fillRect(railMinX - 4, railY - 12, 6, 24);
-    this.armGraphics.fillRect(railMaxX - 2, railY - 12, 6, 24);
-
-    // B. Carro Deslizante del Pórtico (Trolley)
     this.armGraphics.fillStyle(0x1e293b, 1);
-    this.armGraphics.fillRoundedRect(sx - 30, railY - 14, 60, 28, 5);
+    this.armGraphics.fillRoundedRect(this.trolleyX - 24, this.railY - 10, 48, 24, 4);
     this.armGraphics.lineStyle(2, 0x3b82f6, 1);
-    this.armGraphics.strokeRoundedRect(sx - 30, railY - 14, 60, 28, 5);
+    this.armGraphics.strokeRoundedRect(this.trolleyX - 24, this.railY - 10, 48, 24, 4);
 
-    // Ruedas/Rodamientos del carro
-    const wheels = [
-      { x: sx - 18, y: railY - 10 },
-      { x: sx + 18, y: railY - 10 },
-      { x: sx - 18, y: railY + 10 },
-      { x: sx + 18, y: railY + 10 }
-    ];
-    this.armGraphics.fillStyle(0x64748b, 1);
-    wheels.forEach(w => {
-      this.armGraphics.fillCircle(w.x, w.y, 4.5);
-      this.armGraphics.lineStyle(1, 0x94a3b8, 1);
-      this.armGraphics.strokeCircle(w.x, w.y, 4.5);
-    });
+    // Eslabones del brazo
+    this.armGraphics.lineStyle(10, 0x1e293b, 1);
+    this.armGraphics.lineBetween(shoulderX, shoulderY, this.elbowX, this.elbowY);
+    this.armGraphics.lineBetween(this.elbowX, this.elbowY, this.clawX, this.clawY);
 
-    // Indicador LED de estado en el carro
-    this.armGraphics.fillStyle(this.isMagnetActive ? 0x38bdf8 : 0x10b981, 1);
-    this.armGraphics.fillCircle(sx, railY - 4, 3.5);
+    this.armGraphics.lineStyle(4, 0x60a5fa, 0.9);
+    this.armGraphics.lineBetween(shoulderX, shoulderY, this.elbowX, this.elbowY);
+    this.armGraphics.lineStyle(4, 0x93c5fd, 0.9);
+    this.armGraphics.lineBetween(this.elbowX, this.elbowY, this.clawX, this.clawY);
 
-    // Base del hombro conectada al carro
-    this.armGraphics.fillStyle(0x334155, 1);
-    this.armGraphics.fillRect(sx - 9, railY + 10, 18, 9);
-    this.armGraphics.lineStyle(1.5, 0x60a5fa, 1);
-    this.armGraphics.strokeRect(sx - 9, railY + 10, 18, 9);
+    // Juntas circulares
+    this.armGraphics.fillStyle(0x3b82f6, 1);
+    this.armGraphics.fillCircle(shoulderX, shoulderY, 8);
+    this.armGraphics.fillCircle(this.elbowX, this.elbowY, 7);
 
-    // C. Eslabón Superior (Húmero)
-    this.armGraphics.lineStyle(15, 0x1e293b, 1);
-    this.armGraphics.lineBetween(sx, sy, ex, ey);
-    this.armGraphics.lineStyle(5, 0x2563eb, 0.95);
-    this.armGraphics.lineBetween(sx, sy, ex, ey);
-    this.armGraphics.lineStyle(2, 0x93c5fd, 0.85);
-    this.armGraphics.lineBetween(sx, sy, ex, ey);
+    // Pinza / Electroimán
+    this.renderClaw(this.clawX, this.clawY);
+  }
 
-    // D. Eslabón Inferior (Antebrazo)
-    this.armGraphics.lineStyle(13, 0x1e293b, 1);
-    this.armGraphics.lineBetween(ex, ey, cx, cy);
-    this.armGraphics.lineStyle(4, 0x38bdf8, 0.95);
-    this.armGraphics.lineBetween(ex, ey, cx, cy);
-    this.armGraphics.lineStyle(1.5, 0xe0f2fe, 0.85);
-    this.armGraphics.lineBetween(ex, ey, cx, cy);
+  private renderClaw(cx: number, cy: number) {
+    this.armGraphics.fillStyle(0x0f172a, 1);
+    this.armGraphics.fillRoundedRect(cx - 16, cy - 8, 32, 16, 3);
+    this.armGraphics.lineStyle(2, this.isMagnetActive ? 0x38bdf8 : 0x64748b, 1);
+    this.armGraphics.strokeRoundedRect(cx - 16, cy - 8, 32, 16, 3);
 
-    // E. Articulaciones Rotativas
-    // Hombro
-    this.armGraphics.fillStyle(0x334155, 1);
-    this.armGraphics.fillCircle(sx, sy, 11);
-    this.armGraphics.lineStyle(2, 0x60a5fa, 1);
-    this.armGraphics.strokeCircle(sx, sy, 11);
-    this.armGraphics.fillStyle(0x93c5fd, 1);
-    this.armGraphics.fillCircle(sx, sy, 4);
+    const jawOffset = this.isMagnetActive ? 7 : 13;
+    this.armGraphics.lineStyle(3, 0xe2e8f0, 1);
+    this.armGraphics.lineBetween(cx - 12, cy + 8, cx - jawOffset, cy + 18);
+    this.armGraphics.lineBetween(cx + 12, cy + 8, cx + jawOffset, cy + 18);
 
-    // Codo
-    this.armGraphics.fillStyle(0x334155, 1);
-    this.armGraphics.fillCircle(ex, ey, 10);
-    this.armGraphics.lineStyle(2, 0x60a5fa, 1);
-    this.armGraphics.strokeCircle(ex, ey, 10);
-    this.armGraphics.fillStyle(0x93c5fd, 1);
-    this.armGraphics.fillCircle(ex, ey, 3.5);
-
-    // Muñeca
-    this.armGraphics.fillStyle(0x334155, 1);
-    this.armGraphics.fillCircle(cx, cy, 8);
-    this.armGraphics.lineStyle(2, 0x38bdf8, 1);
-    this.armGraphics.strokeCircle(cx, cy, 8);
-
-    // F. Cabezal del Electroimán
-    const magnetColor = this.isMagnetActive ? 0x38bdf8 : 0x475569;
-    this.armGraphics.fillStyle(0x1e293b, 1);
-    this.armGraphics.fillRoundedRect(cx - 15, cy + 3, 30, 13, 3);
-    this.armGraphics.lineStyle(1.5, magnetColor, 1);
-    this.armGraphics.strokeRoundedRect(cx - 15, cy + 3, 30, 13, 3);
-
-    // Polos magnéticos
-    this.armGraphics.fillStyle(magnetColor, 1);
-    this.armGraphics.fillRect(cx - 13, cy + 15, 6, 7);
-    this.armGraphics.fillRect(cx + 7, cy + 15, 6, 7);
-
-    // G. Efectos Visuales del Campo Magnético y Haz de Energía
     if (this.isMagnetActive) {
-      // Núcleo brillante
       this.armGraphics.fillStyle(0x38bdf8, 1);
       this.armGraphics.fillCircle(cx, cy + 9, 4);
-      this.armGraphics.fillStyle(0xffffff, 1);
-      this.armGraphics.fillCircle(cx, cy + 9, 2);
-
-      // Halo resplandeciente
-      this.fxGraphics.fillStyle(0x38bdf8, 0.2);
-      this.fxGraphics.fillCircle(cx, cy + 16, 28);
-      this.fxGraphics.fillStyle(0x0284c7, 0.35);
-      this.fxGraphics.fillCircle(cx, cy + 16, 16);
-      this.fxGraphics.lineStyle(2, 0x38bdf8, 0.7);
-      this.fxGraphics.strokeCircle(cx, cy + 16, 22);
-
-      // Ondas de flujo magnético hacia abajo
-      this.fxGraphics.lineStyle(2, 0x38bdf8, 0.85);
-      this.fxGraphics.arc(cx, cy + 16, 13, Phaser.Math.DegToRad(35), Phaser.Math.DegToRad(145), false);
-      this.fxGraphics.strokePath();
-      this.fxGraphics.arc(cx, cy + 16, 22, Phaser.Math.DegToRad(45), Phaser.Math.DegToRad(135), false);
-      this.fxGraphics.strokePath();
-
-      // Haz que vincula el electroimán con la pieza transportada
-      if (this.heldPart) {
-        const partTopY = this.heldPart.body.position.y - this.heldPart.height / 2;
-        this.fxGraphics.lineStyle(2.5, 0x7dd3fc, 0.95);
-        this.fxGraphics.lineBetween(cx - 10, cy + 20, cx - 10, partTopY);
-        this.fxGraphics.lineBetween(cx + 10, cy + 20, cx + 10, partTopY);
-        this.fxGraphics.lineStyle(1.5, 0xffffff, 1);
-        this.fxGraphics.lineBetween(cx, cy + 16, cx, partTopY);
-      }
     } else {
       this.armGraphics.fillStyle(0x0f172a, 1);
       this.armGraphics.fillCircle(cx, cy + 9, 3);
     }
   }
 
-  private triggerVictory() {
+  public triggerVictory() {
     const elapsedSeconds = Math.round((Date.now() - this.startTime) / 1000);
 
     const avgAccuracy = Math.round(this.parts.reduce((acc, p) => acc + p.accuracy, 0) / this.totalParts);
@@ -815,26 +908,24 @@ export class RoboticsMinigameScene extends Phaser.Scene {
       (avgAccuracy * 0.6) + sequenceBonus + (25 - roughPenalty)
     )));
 
-    // Tarea 19: Puntuación secundaria continua para 'sec' en rango [55, 100]
     const secondarySecScore = Math.max(55, Math.min(100, Math.round(
       (avgAccuracy * 0.7) + Math.max(0, 30 - roughPenalty)
     )));
 
-    // Tarea 21: Stealth Assessment (Landers 2024 / Shute 2011)
     const grabDelay = this.firstGrabDelaySec > 0 ? this.firstGrabDelaySec : elapsedSeconds;
     const behavioralBonuses: Partial<VocationalScores> = {};
     if (grabDelay >= 3.5) {
-      behavioralBonuses.data = 0.6; // Planificación e inspección visual previa
+      behavioralBonuses.data = 0.6;
     } else if (grabDelay <= 1.5) {
-      behavioralBonuses.dev = 0.5;  // Enfoque directo y pragmático
+      behavioralBonuses.dev = 0.5;
     }
 
-    if (this.regrabsCount > 0) {
-      behavioralBonuses.dev = (behavioralBonuses.dev || 0) + 0.4; // Tolerancia al fallo / debugging iterativo
+    if (this.programRunAttempts > 0) {
+      behavioralBonuses.dev = (behavioralBonuses.dev || 0) + 0.5; // Pensamiento algorítmico y ejecución programada
     }
 
     if (this.failedDropsCount === 0) {
-      behavioralBonuses.biz = 0.5; // Cuidado procedimental con recursos
+      behavioralBonuses.biz = 0.5;
     }
 
     const metrics: MinigameMetrics = {
@@ -845,9 +936,9 @@ export class RoboticsMinigameScene extends Phaser.Scene {
       details: {
         'Precisión Promedio': `${avgAccuracy}%`,
         'Orden Lógico': isSequential ? 'Secuencia Óptima (100%)' : 'Alternativo (75%)',
+        'Programas Ejecutados': `${this.programRunAttempts}`,
         'Control Cinemático': `${Math.max(60, 100 - roughPenalty)}%`,
         'Tiempo de Montaje': `${elapsedSeconds} seg`,
-        'Planificación Previa': `${grabDelay.toFixed(1)} seg`,
         'Reintentos / Caídas': `${this.regrabsCount} / ${this.failedDropsCount}`
       },
       feedbackSummary: `Excelente capacidad de construcción lógica. Lograste un ${avgAccuracy}% de precisión de encaje y ${isSequential ? 'el orden ideal de compilación' : 'un montaje funcional'}.`
@@ -908,7 +999,7 @@ export class RoboticsMinigameScene extends Phaser.Scene {
 
     detailsText.setText(
       `Precisión de Ranura: ${metrics.details['Precisión Promedio']} | Montaje: ${metrics.details['Orden Lógico']}\n` +
-      `Control de Inercia: ${metrics.details['Control Cinemático']}\n\n` +
+      `Programas Ejecutados: ${metrics.details['Programas Ejecutados']} | Control de Inercia: ${metrics.details['Control Cinemático']}\n\n` +
       `${metrics.feedbackSummary}`
     );
 
@@ -921,7 +1012,7 @@ export class RoboticsMinigameScene extends Phaser.Scene {
     });
   }
 
-  private closeMinigame(metrics?: MinigameMetrics) {
+  public closeMinigame(metrics?: MinigameMetrics) {
     if (metrics && this.onCompleteCallback) {
       this.onCompleteCallback(metrics);
     } else if (!metrics && this.onCancelCallback) {

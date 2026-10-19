@@ -8,6 +8,7 @@ export interface ActivityCard {
   color: number;
   colorHex: string;
   desc: string;
+  cost: number;
   famImpact: number;
   invImpact: number;
   juvImpact: number;
@@ -34,7 +35,7 @@ export class BizMinigameScene extends Phaser.Scene {
   private panelX = 512;
   private panelY = 320;
 
-  // Catálogo de actividades
+  // Catálogo de actividades con coste en créditos
   private activities: ActivityCard[] = [
     {
       id: 'cine',
@@ -43,6 +44,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0x3b82f6,
       colorHex: '#3b82f6',
       desc: 'Cine Comunitario: Ideal para familias por la tarde. Ruidoso para investigación de noche.',
+      cost: 8,
       famImpact: 8,
       invImpact: -4,
       juvImpact: 6,
@@ -56,6 +58,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0x10b981,
       colorHex: '#10b981',
       desc: 'Fitness & Deporte: Desestrés activo. Muy valorado por jóvenes y adultos.',
+      cost: 7,
       famImpact: 5,
       invImpact: 4,
       juvImpact: 7,
@@ -68,6 +71,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0x8b5cf6,
       colorHex: '#8b5cf6',
       desc: 'Modo Silencio & Lectura: Imprescindible para investigadores nocturnos.',
+      cost: 4,
       famImpact: -3,
       invImpact: 10,
       juvImpact: -5,
@@ -81,6 +85,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0xf59e0b,
       colorHex: '#f59e0b',
       desc: 'Torneo de Juegos: Diversión compartida para niños y jóvenes en horas diurnas.',
+      cost: 7,
       famImpact: 9,
       invImpact: -3,
       juvImpact: 8,
@@ -94,6 +99,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0xec4899,
       colorHex: '#ec4899',
       desc: 'Conciertos & Ensayos: Entusiasmo juvenil y social. Requiere aislamiento sonoro.',
+      cost: 9,
       famImpact: 3,
       invImpact: -6,
       juvImpact: 10,
@@ -107,6 +113,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0x06b6d4,
       colorHex: '#06b6d4',
       desc: 'Taller Científico: Aprendizaje y cálculo. Conecta a investigadores con familias.',
+      cost: 6,
       famImpact: 6,
       invImpact: 9,
       juvImpact: 3,
@@ -120,6 +127,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0xf97316,
       colorHex: '#f97316',
       desc: 'Noche Social & Baile: Máxima energía juvenil en fin de semana. No recomendada en días laborales.',
+      cost: 10,
       famImpact: -4,
       invImpact: -8,
       juvImpact: 12,
@@ -134,6 +142,7 @@ export class BizMinigameScene extends Phaser.Scene {
       color: 0x14b8a6,
       colorHex: '#14b8a6',
       desc: 'Yoga & Descanso: Armonía mental y relajación profunda para todos los tripulantes.',
+      cost: 5,
       famImpact: 6,
       invImpact: 7,
       juvImpact: 3,
@@ -146,11 +155,14 @@ export class BizMinigameScene extends Phaser.Scene {
   // Casilleros del calendario (7 días x 2 franjas = 14)
   private slots: CalendarSlot[] = [];
 
-  // Satisfacción en tiempo real (0-100)
+  // Satisfacción en tiempo real (0-100) y umbrales más exigentes
   private famScore = 40;
   private invScore = 40;
   private juvScore = 40;
-  private readonly MIN_THRESHOLD = 50;
+  private readonly MIN_THRESHOLD = 65;
+  private readonly TOTAL_BUDGET = 100;
+  private currentSpentCredits = 0;
+  private detectedConflictsCount = 0;
 
   // Elementos de UI de medidores
   private famBarFill!: Phaser.GameObjects.Rectangle;
@@ -165,6 +177,7 @@ export class BizMinigameScene extends Phaser.Scene {
 
   private consensusText!: Phaser.GameObjects.Text;
   private consensusSubtext!: Phaser.GameObjects.Text;
+  private budgetText!: Phaser.GameObjects.Text;
   private statusBannerText!: Phaser.GameObjects.Text;
   private statusBannerBg!: Phaser.GameObjects.Rectangle;
   private approveBtn!: Phaser.GameObjects.Rectangle;
@@ -310,21 +323,28 @@ export class BizMinigameScene extends Phaser.Scene {
     const juvX = this.panelX + 95;
     this.createGaugeCard(juvX, startY, cardWidth, cardHeight, '🎮 Jóvenes', 0x4ade80, 'juv');
 
-    // Card 4: Consenso y Equilibrio
+    // Card 4: Consenso, Equilibrio y Presupuesto
     const conX = this.panelX + 325;
     const conCard = this.add.rectangle(conX, startY, 195, cardHeight, 0x0f172a, 0.95);
     conCard.setStrokeStyle(1.5, 0xf59e0b);
 
-    this.consensusText = this.add.text(conX, startY - 8, '⚖️ Consenso: 40%', {
-      fontSize: '12px',
+    this.consensusText = this.add.text(conX, startY - 11, '⚖️ Consenso: 40%', {
+      fontSize: '11px',
       color: '#facc15',
       fontStyle: 'bold',
       fontFamily: 'sans-serif'
     }).setOrigin(0.5);
 
-    this.consensusSubtext = this.add.text(conX, startY + 10, 'Equilibrio: En ajuste', {
-      fontSize: '10px',
+    this.consensusSubtext = this.add.text(conX - 45, startY + 8, 'Equilibrio: --', {
+      fontSize: '9.5px',
       color: '#94a3b8',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    this.budgetText = this.add.text(conX + 45, startY + 8, '💰 0/100 Cr', {
+      fontSize: '9.5px',
+      color: '#4ade80',
+      fontStyle: 'bold',
       fontFamily: 'sans-serif'
     }).setOrigin(0.5);
   }
@@ -849,7 +869,10 @@ export class BizMinigameScene extends Phaser.Scene {
     let deltaInv = 0;
     let deltaJuv = 0;
     let filledCount = 0;
+    let spentCredits = 0;
+    const actCounts: { [id: string]: number } = {};
 
+    // 1. Contar frecuencias y calcular créditos empleados
     for (const slot of this.slots) {
       if (!slot.activityId) continue;
       filledCount++;
@@ -857,10 +880,46 @@ export class BizMinigameScene extends Phaser.Scene {
       const act = this.activities.find(a => a.id === slot.activityId);
       if (!act) continue;
 
-      // Cálculo de aportes y modificadores por franja y día
+      spentCredits += act.cost;
+      actCounts[act.id] = (actCounts[act.id] || 0) + 1;
+    }
+
+    this.currentSpentCredits = spentCredits;
+
+    // 2. Detección de conflictos sonoros adyacentes en el mismo día
+    let conflictCount = 0;
+    for (let day = 0; day < 7; day++) {
+      const afternoonSlot = this.slots.find(s => s.dayIndex === day && s.timeSlotIndex === 0);
+      const nightSlot = this.slots.find(s => s.dayIndex === day && s.timeSlotIndex === 1);
+      if (afternoonSlot?.activityId && nightSlot?.activityId) {
+        const hasLoud = afternoonSlot.activityId === 'musica' || afternoonSlot.activityId === 'fiesta' ||
+                        nightSlot.activityId === 'musica' || nightSlot.activityId === 'fiesta';
+        const hasQuiet = afternoonSlot.activityId === 'silencio' || nightSlot.activityId === 'silencio';
+        if (hasLoud && hasQuiet) {
+          conflictCount++;
+          deltaInv -= 3; // Penalización por conflicto sonoro
+        }
+      }
+    }
+    this.detectedConflictsCount = conflictCount;
+
+    // 3. Modificadores y atenuación por fatiga (>3 repeticiones)
+    for (const slot of this.slots) {
+      if (!slot.activityId) continue;
+
+      const act = this.activities.find(a => a.id === slot.activityId);
+      if (!act) continue;
+
       let famImpact = act.famImpact;
       let invImpact = act.invImpact;
       let juvImpact = act.juvImpact;
+
+      // Fatiga comunitaria si se satura la misma actividad
+      if ((actCounts[act.id] || 0) > 3) {
+        if (famImpact > 0) famImpact = Math.round(famImpact * 0.7);
+        if (juvImpact > 0) juvImpact = Math.round(juvImpact * 0.7);
+        if (invImpact > 0) invImpact = Math.round(invImpact * 0.7);
+      }
 
       // Franja horaria: Tarde (0) vs Noche (1)
       if (slot.timeSlotIndex === 0 && act.afternoonFamModifier) {
@@ -920,23 +979,37 @@ export class BizMinigameScene extends Phaser.Scene {
     this.juvStatusIcon.setText(juvOk ? '✅' : '⚠️');
     this.juvPercentText.setColor(juvOk ? '#4ade80' : '#f87171');
 
-    // Consenso global
+    // Consenso global y Presupuesto
     const avgScore = Math.round((this.famScore + this.invScore + this.juvScore) / 3);
     const spread = Math.max(this.famScore, this.invScore, this.juvScore) - Math.min(this.famScore, this.invScore, this.juvScore);
     const balanceRating = spread <= 15 ? 'Óptimo' : spread <= 30 ? 'Aceptable' : 'Disparejo';
 
     this.consensusText.setText(`⚖️ Consenso: ${avgScore}%`);
-    this.consensusSubtext.setText(`Equilibrio: ${balanceRating} (±${Math.round(spread / 2)}%)`);
+    this.consensusSubtext.setText(`Equilibrio: ${balanceRating}`);
+    if (this.budgetText) {
+      this.budgetText.setText(`💰 ${this.currentSpentCredits}/${this.TOTAL_BUDGET} Cr`);
+      this.budgetText.setColor(this.currentSpentCredits <= this.TOTAL_BUDGET ? '#4ade80' : '#ef4444');
+    }
 
     // Validar condiciones de aprobación
     const allThresholdsMet = famOk && invOk && juvOk;
     const minSlotsFilled = filledCount >= 10;
+    const budgetOk = this.currentSpentCredits <= this.TOTAL_BUDGET;
 
     if (!minSlotsFilled) {
       this.statusBannerBg.setFillStyle(0x1e293b, 0.95);
       this.statusBannerBg.setStrokeStyle(1.5, 0x475569);
       this.statusBannerText.setText(`⚠️ Faltan franjas por asignar (${filledCount}/14). Asigna al menos 10 casilleros.`);
       this.statusBannerText.setColor('#cbd5e1');
+
+      this.approveBtn.setFillStyle(0x334155, 0.9);
+      this.approveBtn.setStrokeStyle(1.5, 0x64748b);
+      this.approveBtnText.setColor('#94a3b8');
+    } else if (!budgetOk) {
+      this.statusBannerBg.setFillStyle(0x450a0a, 0.95);
+      this.statusBannerBg.setStrokeStyle(1.5, 0xef4444);
+      this.statusBannerText.setText(`⚠️ Presupuesto excedido (${this.currentSpentCredits}/${this.TOTAL_BUDGET} Cr). Reemplaza actividades costosas.`);
+      this.statusBannerText.setColor('#fca5a5');
 
       this.approveBtn.setFillStyle(0x334155, 0.9);
       this.approveBtn.setStrokeStyle(1.5, 0x64748b);
@@ -949,21 +1022,20 @@ export class BizMinigameScene extends Phaser.Scene {
 
       this.statusBannerBg.setFillStyle(0x450a0a, 0.95);
       this.statusBannerBg.setStrokeStyle(1.5, 0xef4444);
-      this.statusBannerText.setText(`⚠️ Conflicto: ${failing.join(', ')} están por debajo del umbral mínimo (< 50%).`);
+      this.statusBannerText.setText(`⚠️ Conflicto: ${failing.join(', ')} están por debajo del umbral mínimo (< ${this.MIN_THRESHOLD}%).`);
       this.statusBannerText.setColor('#fca5a5');
 
       this.approveBtn.setFillStyle(0x334155, 0.9);
       this.approveBtn.setStrokeStyle(1.5, 0x64748b);
       this.approveBtnText.setColor('#94a3b8');
     } else {
-      // Stealth Assessment: Momento en que se alcanza la primera solución armónica viable
       if (this.firstViableTimeSec === 0) {
         this.firstViableTimeSec = Math.max(1, Math.round((Date.now() - this.startTime) / 1000));
       }
 
       this.statusBannerBg.setFillStyle(0x064e3b, 0.95);
       this.statusBannerBg.setStrokeStyle(1.5, 0x10b981);
-      this.statusBannerText.setText(`✅ ¡Pacto de Convivencia Armónico! Todos los grupos superan el 50% (${filledCount}/14 turnos).`);
+      this.statusBannerText.setText(`✅ ¡Pacto de Convivencia Armónico! Todos los grupos ≥ ${this.MIN_THRESHOLD}% (${this.currentSpentCredits} Cr).`);
       this.statusBannerText.setColor('#6ee7b7');
 
       this.approveBtn.setFillStyle(0x059669, 1);
@@ -977,11 +1049,19 @@ export class BizMinigameScene extends Phaser.Scene {
     const famOk = this.famScore >= this.MIN_THRESHOLD;
     const invOk = this.invScore >= this.MIN_THRESHOLD;
     const juvOk = this.juvScore >= this.MIN_THRESHOLD;
+    const budgetOk = this.currentSpentCredits <= this.TOTAL_BUDGET;
 
     if (filledCount < 10) {
       this.invalidApproveClicks++;
       this.cameras.main.shake(180, 0.005);
       this.statusBannerText.setText(`⚠️ Planificación incompleta. Asigna al menos 10 turnos antes de aprobar.`);
+      return;
+    }
+
+    if (!budgetOk) {
+      this.invalidApproveClicks++;
+      this.cameras.main.shake(180, 0.005);
+      this.statusBannerText.setText(`⚠️ Presupuesto excedido. No puedes aprobar con más de ${this.TOTAL_BUDGET} créditos.`);
       return;
     }
 
@@ -1048,6 +1128,8 @@ export class BizMinigameScene extends Phaser.Scene {
         'Satisfacción Familias': `${Math.round(this.famScore)}%`,
         'Satisfacción Investigadores': `${Math.round(this.invScore)}%`,
         'Satisfacción Jóvenes': `${Math.round(this.juvScore)}%`,
+        'Créditos Empleados': `${this.currentSpentCredits} / ${this.TOTAL_BUDGET} Cr`,
+        'Conflictos Mitigados': `${this.detectedConflictsCount === 0 ? 'Sin Fricciones' : `${this.detectedConflictsCount} resueltos`}`,
         'Consenso Global': `${Math.round(avgScore)}%`,
         'Índice de Equilibrio': `${Math.round(balanceIndex)}%`,
         'Diversidad Soluciones': `${uniqueActivities}/8 actividades`,
