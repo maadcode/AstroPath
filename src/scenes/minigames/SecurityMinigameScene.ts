@@ -334,21 +334,36 @@ export class SecurityMinigameScene extends Phaser.Scene {
     // Botón Izquierda / Cuarentena
     const btnLeft = this.add.rectangle(this.panelX - 180, controlY, 150, 34, 0x1e293b).setInteractive({ useHandCursor: true });
     btnLeft.setStrokeStyle(1, 0xef4444);
-    this.add.text(btnLeft.x, btnLeft.y, '◄ Cuarentena [A]', { fontSize: '11px', color: '#fca5a5', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnLeft.x, btnLeft.y, '◄ Cuarentena [A]', {
+      fontSize: '11px',
+      color: '#fca5a5',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     btnLeft.on('pointerdown', () => this.tiltDeflector(-0.55));
 
     // Botón Centro
     const btnCenter = this.add.rectangle(this.panelX - 55, controlY, 80, 34, 0x1e293b).setInteractive({ useHandCursor: true });
     btnCenter.setStrokeStyle(1, 0x64748b);
-    this.add.text(btnCenter.x, btnCenter.y, '● [W]', { fontSize: '11px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnCenter.x, btnCenter.y, '● [W]', {
+      fontSize: '11px',
+      color: '#e2e8f0',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     btnCenter.on('pointerdown', () => this.tiltDeflector(0));
 
     // Botón Escanear
     const btnScan = this.add.rectangle(this.panelX + 45, controlY, 95, 34, 0x312e81).setInteractive({ useHandCursor: true });
     btnScan.setStrokeStyle(1, 0x818cf8);
-    this.add.text(btnScan.x, btnScan.y, '🔍 Escanear', { fontSize: '11px', color: '#c7d2fe', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnScan.x, btnScan.y, '🔍 Escanear', {
+      fontSize: '11px',
+      color: '#c7d2fe',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     btnScan.on('pointerdown', () => { this.isScanning = true; });
     btnScan.on('pointerup', () => { this.isScanning = false; });
@@ -357,7 +372,12 @@ export class SecurityMinigameScene extends Phaser.Scene {
     // Botón Derecha / Bóveda
     const btnRight = this.add.rectangle(this.panelX + 180, controlY, 150, 34, 0x1e293b).setInteractive({ useHandCursor: true });
     btnRight.setStrokeStyle(1, 0x38bdf8);
-    this.add.text(btnRight.x, btnRight.y, 'Bóveda [D] ►', { fontSize: '11px', color: '#7dd3fc', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(btnRight.x, btnRight.y, 'Bóveda [D] ►', {
+      fontSize: '11px',
+      color: '#7dd3fc',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
 
     btnRight.on('pointerdown', () => this.tiltDeflector(0.55));
 
@@ -446,10 +466,10 @@ export class SecurityMinigameScene extends Phaser.Scene {
     let badgeText: Phaser.GameObjects.Text | undefined;
 
     if (isAmbiguous) {
-      // Paquete ambiguo: diamante amarillo con símbolo [?]
-      body = this.matter.add.rectangle(spawnX, spawnY, 22, 22, {
-        restitution: 0.65,
-        friction: 0.05,
+      // Paquete ambiguo: cuerpo físico circular para rodar suavemente sin atascarse
+      body = this.matter.add.circle(spawnX, spawnY, 11, {
+        restitution: 0.75,
+        friction: 0.02,
         density: 0.002,
         label: 'packet_ambiguous'
       });
@@ -457,25 +477,26 @@ export class SecurityMinigameScene extends Phaser.Scene {
       badgeText = this.add.text(spawnX, spawnY, '?', {
         fontSize: '13px',
         color: '#ffffff',
-        fontStyle: 'bold'
+        fontStyle: 'bold',
+        fontFamily: 'sans-serif'
       }).setOrigin(0.5);
     } else if (isThreat) {
-      // Malware: Cubo rojo con borde
-      body = this.matter.add.rectangle(spawnX, spawnY, 22, 22, {
-        restitution: 0.7,
-        friction: 0.06,
+      // Malware: Círculo rojo (esfera con borde) para que ruede perfectamente por el deflector sin trabarse
+      body = this.matter.add.circle(spawnX, spawnY, 11, {
+        restitution: 0.75,
+        friction: 0.02,
         density: 0.002,
         label: 'packet_threat'
       });
       g.fillStyle(0xef4444, 1);
-      g.fillRect(-11, -11, 22, 22);
+      g.fillCircle(0, 0, 11);
       g.lineStyle(2, 0xffffff, 0.9);
-      g.strokeRect(-11, -11, 22, 22);
+      g.strokeCircle(0, 0, 11);
     } else {
       // Datos limpios: Esfera cian suave
       body = this.matter.add.circle(spawnX, spawnY, 11, {
         restitution: 0.8,
-        friction: 0.04,
+        friction: 0.02,
         density: 0.0015,
         label: 'packet_clean'
       });
@@ -672,11 +693,11 @@ export class SecurityMinigameScene extends Phaser.Scene {
 
     packet.shapeGraphic.clear();
     if (packet.isThreat) {
-      // Revelado: Malware rojo
+      // Revelado: Malware rojo (Círculo rojo)
       packet.shapeGraphic.fillStyle(0xef4444, 1);
-      packet.shapeGraphic.fillRect(-11, -11, 22, 22);
+      packet.shapeGraphic.fillCircle(0, 0, 11);
       packet.shapeGraphic.lineStyle(2, 0xffffff, 0.9);
-      packet.shapeGraphic.strokeRect(-11, -11, 22, 22);
+      packet.shapeGraphic.strokeCircle(0, 0, 11);
       this.createFlashEffect(packet.body.position.x, packet.body.position.y, 0xef4444);
     } else {
       // Revelado: Datos limpios cian
