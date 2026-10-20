@@ -42,6 +42,12 @@ export class SpaceShipScene extends Phaser.Scene {
   private endInteraction() {
     this.isInteracting = false;
     this.lastInteractionEndTime = this.time.now;
+    const dialogScene = this.scene.get('DialogScene') as DialogScene;
+    const isDialogActive = dialogScene ? dialogScene.isDialogVisible() : false;
+    const uiScene = this.scene.get('UIScene') as UIScene;
+    if (uiScene && !isDialogActive && !this.scene.isPaused('SpaceShipScene')) {
+      uiScene.setRadarVisible(true);
+    }
   }
 
   create() {
@@ -98,11 +104,17 @@ export class SpaceShipScene extends Phaser.Scene {
       this.scene.launch('DialogScene');
     }
 
-    // 8. Asegurar liberación de controles al reanudar la escena
+    // 8. Asegurar liberación de controles al reanudar la escena y restaurar UI
     this.events.on('resume', () => {
       const dialogScene = this.scene.get('DialogScene') as DialogScene;
       if (!dialogScene || !dialogScene.isDialogVisible()) {
         this.endInteraction();
+      }
+      const uiScene = this.scene.get('UIScene') as UIScene;
+      if (uiScene) {
+        uiScene.refreshRadarStationStates();
+        const isDialogActive = dialogScene ? dialogScene.isDialogVisible() : false;
+        uiScene.setRadarVisible(!isDialogActive && !this.isInteracting);
       }
     });
 
@@ -115,6 +127,10 @@ export class SpaceShipScene extends Phaser.Scene {
       if (this.footstepsSound && this.footstepsSound.isPlaying) {
         this.footstepsSound.stop();
       }
+      const uiScene = this.scene.get('UIScene') as UIScene;
+      if (uiScene) {
+        uiScene.setRadarVisible(false);
+      }
     });
 
     this.events.on('shutdown', () => {
@@ -122,12 +138,35 @@ export class SpaceShipScene extends Phaser.Scene {
         this.footstepsSound.stop();
       }
     });
+
+    // 10. Sincronizar posición y estado inicial del radar en UIScene
+    const uiScene = this.scene.get('UIScene') as UIScene;
+    if (uiScene) {
+      uiScene.updatePlayerPosition(this.player.x, this.player.y);
+      uiScene.refreshRadarStationStates();
+      uiScene.setRadarVisible(true);
+    }
   }
 
   update() {
     this.handlePlayerMovement();
     this.checkNPCProximity();
     this.handleInteractionInput();
+    this.updateRadarSync();
+  }
+
+  private updateRadarSync() {
+    const uiScene = this.scene.get('UIScene') as UIScene;
+    if (!uiScene || !this.player) return;
+
+    uiScene.updatePlayerPosition(this.player.x, this.player.y);
+
+    const dialogScene = this.scene.get('DialogScene') as DialogScene;
+    const isDialogActive = dialogScene ? dialogScene.isDialogVisible() : false;
+    const isPaused = this.scene.isPaused('SpaceShipScene');
+    const shouldShowRadar = !isDialogActive && !isPaused && !this.isInteracting;
+
+    uiScene.setRadarVisible(shouldShowRadar);
   }
 
   private buildShipEnvironment() {
@@ -497,6 +536,10 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private triggerInteraction(npc: InteractiveNPC) {
     this.isInteracting = true;
+    const uiScene = this.scene.get('UIScene') as UIScene;
+    if (uiScene) {
+      uiScene.setRadarVisible(false);
+    }
     this.player.setVelocity(0, 0);
     this.player.play(`player_idle_${this.currentDirection}`, true);
     if (this.footstepsSound && this.footstepsSound.isPlaying) {
@@ -507,7 +550,6 @@ export class SpaceShipScene extends Phaser.Scene {
     }
 
     const dialogScene = this.scene.get('DialogScene') as DialogScene;
-    const uiScene = this.scene.get('UIScene') as UIScene;
     const station = this.gameState.getStation(npc.stationId);
 
     if (!station) {
@@ -611,6 +653,7 @@ export class SpaceShipScene extends Phaser.Scene {
 
                 npc.indicator.setTexture('check_bubble');
                 this.endInteraction();
+                uiScene.updateStationStatus(station.id, true);
                 uiScene.updateHUD();
                 uiScene.showCompletionToast(station.name);
 
@@ -636,6 +679,7 @@ export class SpaceShipScene extends Phaser.Scene {
               if (this.sound && this.cache.audio.exists('sfx_whoosh')) {
                 this.sound.play('sfx_whoosh', { volume: 0.45 });
               }
+              uiScene.setRadarVisible(false);
               this.scene.pause('SpaceShipScene');
               this.scene.launch(mgConfig.scene, {
                 onComplete: (metrics: any) => {

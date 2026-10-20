@@ -1,6 +1,15 @@
 import * as Phaser from 'phaser';
 import { GameState } from '../state/GameState';
 
+interface RadarStationMarker {
+  id: string;
+  container: Phaser.GameObjects.Container;
+  halo: Phaser.GameObjects.Arc;
+  dot: Phaser.GameObjects.Arc;
+  pulseTween?: Phaser.Tweens.Tween;
+  isCompleted: boolean;
+}
+
 export class UIScene extends Phaser.Scene {
   private gameState = GameState.getInstance();
   private missionBannerText!: Phaser.GameObjects.Text;
@@ -10,6 +19,30 @@ export class UIScene extends Phaser.Scene {
   private muteBtnContainer!: Phaser.GameObjects.Container;
   private muteBtnBg!: Phaser.GameObjects.Rectangle;
   private muteBtnText!: Phaser.GameObjects.Text;
+
+  // Radar / Minimapa de Navegación HUD
+  private radarContainer!: Phaser.GameObjects.Container;
+  private radarPlayerDot!: Phaser.GameObjects.Arc;
+  private radarPlayerHalo!: Phaser.GameObjects.Arc;
+  private radarPlayerPulseTween?: Phaser.Tweens.Tween;
+  private radarMarkers: Map<string, RadarStationMarker> = new Map();
+  private isRadarVisible = true;
+
+  // Parámetros de proyección del mapa Kenney a radar
+  private readonly SHIP_MIN_X = 720;
+  private readonly SHIP_MAX_X = 1392;
+  private readonly SHIP_MIN_Y = 20;
+  private readonly SHIP_MAX_Y = 780;
+  private readonly RADAR_INNER_W = 104;
+  private readonly RADAR_INNER_H = 102;
+
+  private readonly STATION_COORDS: { [id: string]: { x: number; y: number; name: string } } = {
+    station_dev: { x: 880, y: 112, name: 'Taller' },
+    station_net: { x: 1232, y: 144, name: 'Antenas' },
+    station_sec: { x: 880, y: 304, name: 'Seguridad' },
+    station_data: { x: 880, y: 464, name: 'Cultivos' },
+    station_biz: { x: 1232, y: 592, name: 'Salón' }
+  };
 
   // Soporte móvil: Botones virtuales
   private mobileControlsContainer!: Phaser.GameObjects.Container;
@@ -59,11 +92,244 @@ export class UIScene extends Phaser.Scene {
       fontFamily: 'sans-serif'
     }).setOrigin(0.5);
 
-    // 2. Controles virtuales para pantallas táctiles / móviles
+    // 2. Minimapa / Radar de Navegación en esquina superior derecha
+    this.createRadar(width);
+    this.refreshRadarStationStates();
+
+    // 3. Controles virtuales para pantallas táctiles / móviles
     this.createMobileTouchControls(width, height);
 
     // Escuchar cambios de tamaño
     this.scale.on('resize', this.handleResize, this);
+  }
+
+  private worldToRadar(worldX: number, worldY: number): { x: number; y: number } {
+    const normX = Phaser.Math.Clamp((worldX - this.SHIP_MIN_X) / (this.SHIP_MAX_X - this.SHIP_MIN_X), 0, 1);
+    const normY = Phaser.Math.Clamp((worldY - this.SHIP_MIN_Y) / (this.SHIP_MAX_Y - this.SHIP_MIN_Y), 0, 1);
+
+    const x = (normX - 0.5) * this.RADAR_INNER_W;
+    const y = (normY - 0.5) * this.RADAR_INNER_H + 9;
+    return { x, y };
+  }
+
+  private createRadar(width: number) {
+    if (this.radarContainer) {
+      this.destroyRadar();
+    }
+
+    const radarX = width - 76;
+    const radarY = 135;
+    this.radarContainer = this.add.container(radarX, radarY);
+    this.radarContainer.setDepth(10);
+
+    // 1. Marco exterior y fondo tecnológico de radar
+    const radarW = 132;
+    const radarH = 142;
+
+    const shadow = this.add.rectangle(0, 2, radarW, radarH, 0x000000, 0.45);
+    const bg = this.add.rectangle(0, 0, radarW, radarH, 0x090d16, 0.88);
+    bg.setStrokeStyle(1.5, 0x0284c7);
+
+    // Decoración de cabecera del radar
+    const headerBar = this.add.rectangle(0, -radarH / 2 + 12, radarW - 8, 18, 0x0f172a, 0.9);
+    headerBar.setStrokeStyle(1, 0x1e293b);
+
+    const ledIndicator = this.add.circle(-radarW / 2 + 14, -radarH / 2 + 12, 3, 0x22c55e, 1);
+    const titleText = this.add.text(-radarW / 2 + 22, -radarH / 2 + 12, 'RADAR NAV', {
+      fontSize: '9px',
+      color: '#38bdf8',
+      fontStyle: 'bold',
+      fontFamily: 'monospace'
+    }).setOrigin(0, 0.5);
+
+    // 2. Silueta vectorial esquemática de la nave y retícula de sonar
+    const mapGraphics = this.add.graphics();
+
+    // Retícula de radar tenue (círculos concéntricos y mira)
+    mapGraphics.lineStyle(1, 0x0369a1, 0.22);
+    mapGraphics.strokeCircle(0, 9, 48);
+    mapGraphics.strokeCircle(0, 9, 28);
+    mapGraphics.lineBetween(-48, 9, 48, 9);
+    mapGraphics.lineBetween(0, -39, 0, 57);
+
+    // Pasillo central de la nave
+    const corridorCenter = this.worldToRadar(1072, 360);
+    mapGraphics.fillStyle(0x132238, 0.7);
+    mapGraphics.lineStyle(1, 0x1e3a5f, 0.85);
+    mapGraphics.fillRect(corridorCenter.x - 7, corridorCenter.y - 32, 14, 66);
+    mapGraphics.strokeRect(corridorCenter.x - 7, corridorCenter.y - 32, 14, 66);
+
+    // Salas temáticas esquemáticas
+    const roomDev = this.worldToRadar(880, 112);
+    mapGraphics.fillRect(roomDev.x - 14, roomDev.y - 11, 28, 22);
+    mapGraphics.strokeRect(roomDev.x - 14, roomDev.y - 11, 28, 22);
+
+    const roomNet = this.worldToRadar(1232, 144);
+    mapGraphics.fillRect(roomNet.x - 14, roomNet.y - 11, 28, 22);
+    mapGraphics.strokeRect(roomNet.x - 14, roomNet.y - 11, 28, 22);
+
+    const roomSec = this.worldToRadar(880, 304);
+    mapGraphics.fillRect(roomSec.x - 14, roomSec.y - 10, 28, 20);
+    mapGraphics.strokeRect(roomSec.x - 14, roomSec.y - 10, 28, 20);
+
+    const roomData = this.worldToRadar(880, 464);
+    mapGraphics.fillRect(roomData.x - 14, roomData.y - 10, 28, 20);
+    mapGraphics.strokeRect(roomData.x - 14, roomData.y - 10, 28, 20);
+
+    const roomBiz = this.worldToRadar(1232, 592);
+    mapGraphics.fillRect(roomBiz.x - 16, roomBiz.y - 12, 32, 24);
+    mapGraphics.strokeRect(roomBiz.x - 16, roomBiz.y - 12, 32, 24);
+
+    // Pasillos conectores hacia las salas
+    mapGraphics.lineBetween(corridorCenter.x - 7, roomDev.y, roomDev.x + 14, roomDev.y);
+    mapGraphics.lineBetween(corridorCenter.x + 7, roomNet.y, roomNet.x - 14, roomNet.y);
+    mapGraphics.lineBetween(corridorCenter.x - 7, roomSec.y, roomSec.x + 14, roomSec.y);
+    mapGraphics.lineBetween(corridorCenter.x - 7, roomData.y, roomData.x + 14, roomData.y);
+    mapGraphics.lineBetween(corridorCenter.x + 7, roomBiz.y, roomBiz.x - 16, roomBiz.y);
+
+    this.radarContainer.add([shadow, bg, headerBar, ledIndicator, titleText, mapGraphics]);
+
+    // 3. Crear los 5 iconos luminosos de las estaciones
+    this.radarMarkers.clear();
+
+    Object.entries(this.STATION_COORDS).forEach(([stationId, data]) => {
+      const pos = this.worldToRadar(data.x, data.y);
+      const station = this.gameState.getStation(stationId);
+      const isCompleted = station ? station.completed : false;
+
+      const markerContainer = this.add.container(pos.x, pos.y);
+
+      // Halo exterior
+      const halo = this.add.circle(0, 0, 7.5, isCompleted ? 0x22c55e : 0xfacc15, isCompleted ? 0.35 : 0.5);
+      // Núcleo brillante
+      const dot = this.add.circle(0, 0, 3.5, isCompleted ? 0x22c55e : 0xfacc15, 1);
+
+      markerContainer.add([halo, dot]);
+
+      let pulseTween: Phaser.Tweens.Tween | undefined;
+      if (!isCompleted) {
+        pulseTween = this.tweens.add({
+          targets: halo,
+          scale: { from: 0.8, to: 1.55 },
+          alpha: { from: 0.65, to: 0.15 },
+          duration: 750,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
+
+      this.radarContainer.add(markerContainer);
+
+      this.radarMarkers.set(stationId, {
+        id: stationId,
+        container: markerContainer,
+        halo,
+        dot,
+        pulseTween,
+        isCompleted
+      });
+    });
+
+    // 4. Punto cian pulsante: astronauta (jugador)
+    const initialPlayerPos = this.worldToRadar(1072, 304);
+    this.radarPlayerHalo = this.add.circle(initialPlayerPos.x, initialPlayerPos.y, 6.5, 0x00f0ff, 0.45);
+    this.radarPlayerDot = this.add.circle(initialPlayerPos.x, initialPlayerPos.y, 3.5, 0x38bdf8, 1);
+
+    this.radarPlayerPulseTween = this.tweens.add({
+      targets: this.radarPlayerHalo,
+      scale: { from: 0.75, to: 1.65 },
+      alpha: { from: 0.7, to: 0.1 },
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    this.radarContainer.add([this.radarPlayerHalo, this.radarPlayerDot]);
+
+    // 5. Leyenda inferior ultra compacta
+    const legendText = this.add.text(0, radarH / 2 - 10, '🟡 Pendiente  🟢 Listo', {
+      fontSize: '8px',
+      color: '#94a3b8',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    this.radarContainer.add(legendText);
+  }
+
+  private destroyRadar() {
+    if (this.radarPlayerPulseTween) {
+      this.radarPlayerPulseTween.stop();
+      this.radarPlayerPulseTween = undefined;
+    }
+    this.radarMarkers.forEach(m => {
+      if (m.pulseTween) {
+        m.pulseTween.stop();
+        m.pulseTween = undefined;
+      }
+    });
+    this.radarMarkers.clear();
+    this.radarContainer.destroy();
+  }
+
+  public updatePlayerPosition(worldX: number, worldY: number) {
+    if (!this.radarPlayerDot || !this.radarPlayerHalo || !this.radarContainer.active) return;
+    const { x, y } = this.worldToRadar(worldX, worldY);
+    this.radarPlayerDot.setPosition(x, y);
+    this.radarPlayerHalo.setPosition(x, y);
+  }
+
+  public updateStationStatus(stationId: string, completed: boolean) {
+    const marker = this.radarMarkers.get(stationId);
+    if (!marker) return;
+
+    if (completed && !marker.isCompleted) {
+      marker.isCompleted = true;
+      if (marker.pulseTween) {
+        marker.pulseTween.stop();
+        marker.pulseTween = undefined;
+      }
+      marker.halo.setScale(1);
+      marker.halo.setAlpha(0.35);
+      marker.halo.setFillStyle(0x22c55e);
+      marker.dot.setFillStyle(0x22c55e);
+    } else if (!completed && marker.isCompleted) {
+      marker.isCompleted = false;
+      marker.halo.setFillStyle(0xfacc15);
+      marker.dot.setFillStyle(0xfacc15);
+      if (!marker.pulseTween) {
+        marker.pulseTween = this.tweens.add({
+          targets: marker.halo,
+          scale: { from: 0.8, to: 1.55 },
+          alpha: { from: 0.65, to: 0.15 },
+          duration: 750,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
+    }
+  }
+
+  public refreshRadarStationStates() {
+    this.radarMarkers.forEach((_marker, stationId) => {
+      const station = this.gameState.getStation(stationId);
+      const isCompleted = station ? station.completed : false;
+      this.updateStationStatus(stationId, isCompleted);
+    });
+  }
+
+  public setRadarVisible(visible: boolean) {
+    if (this.isRadarVisible === visible) return;
+    this.isRadarVisible = visible;
+    if (this.radarContainer && this.radarContainer.active) {
+      this.radarContainer.setVisible(visible);
+    }
+  }
+
+  public isRadarActive(): boolean {
+    return this.isRadarVisible;
   }
 
   private createMuteButton(width: number) {
@@ -125,6 +391,9 @@ export class UIScene extends Phaser.Scene {
   public updateHUD(customBanner?: string) {
     const completed = this.gameState.getCompletedStationsCount();
     this.progressText.setText(`Estaciones: ${completed} / 5`);
+
+    // Sincronizar dinámicamente los estados de las estaciones en el radar
+    this.refreshRadarStationStates();
 
     if (customBanner) {
       this.missionBannerText.setText(`🧭 ${customBanner}`);
@@ -285,6 +554,9 @@ export class UIScene extends Phaser.Scene {
     }
     if (this.activeToastContainer && this.activeToastContainer.active) {
       this.activeToastContainer.setX(gameSize.width / 2);
+    }
+    if (this.radarContainer && this.radarContainer.active) {
+      this.radarContainer.setPosition(gameSize.width - 76, 135);
     }
     this.createMuteButton(gameSize.width);
 
