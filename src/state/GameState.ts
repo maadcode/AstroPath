@@ -14,6 +14,7 @@ export class GameState {
     data: 0,
     biz: 0
   };
+  public hasSeenWelcome: boolean = false;
 
   private constructor() {
     this.reset();
@@ -37,6 +38,7 @@ export class GameState {
       data: 0,
       biz: 0
     };
+    this.hasSeenWelcome = false;
   }
 
   public getStation(id: string): StationData | undefined {

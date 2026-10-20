@@ -52,6 +52,13 @@ export class UIScene extends Phaser.Scene {
   private activeToastContainer: Phaser.GameObjects.Container | null = null;
   private activeToastTimer: Phaser.Time.TimerEvent | null = null;
 
+  // Onboarding / Modal de Bienvenida Inicial
+  private welcomeModalContainer: Phaser.GameObjects.Container | null = null;
+  private welcomeBackdrop: Phaser.GameObjects.Rectangle | null = null;
+  private isWelcomeModalVisible = false;
+  private hasSeenWelcome = false;
+  private welcomeSpaceKey: Phaser.Input.Keyboard.Key | null = null;
+
   constructor() {
     super('UIScene');
   }
@@ -98,6 +105,11 @@ export class UIScene extends Phaser.Scene {
 
     // 3. Controles virtuales para pantallas táctiles / móviles
     this.createMobileTouchControls(width, height);
+
+    // 4. Modal de Onboarding y Guía Rápida Inicial (solo al arrancar la nave por primera vez)
+    if (!this.checkWelcomeSeen() && !this.gameState.hasSeenWelcome) {
+      this.showWelcomeModal();
+    }
 
     // Escuchar cambios de tamaño
     this.scale.on('resize', this.handleResize, this);
@@ -562,5 +574,296 @@ export class UIScene extends Phaser.Scene {
 
     this.mobileControlsContainer.destroy();
     this.createMobileTouchControls(gameSize.width, gameSize.height);
+
+    if (this.welcomeBackdrop && this.welcomeBackdrop.active) {
+      this.welcomeBackdrop.setPosition(gameSize.width / 2, gameSize.height / 2);
+      this.welcomeBackdrop.setSize(gameSize.width, gameSize.height);
+    }
+    if (this.welcomeModalContainer && this.welcomeModalContainer.active) {
+      this.welcomeModalContainer.setPosition(gameSize.width / 2, gameSize.height / 2);
+    }
+  }
+
+  private checkWelcomeSeen(): boolean {
+    if (this.hasSeenWelcome || this.gameState.hasSeenWelcome) return true;
+    try {
+      return sessionStorage.getItem('odisea_welcome_seen') === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private markWelcomeSeen(): void {
+    this.hasSeenWelcome = true;
+    this.gameState.hasSeenWelcome = true;
+    try {
+      sessionStorage.setItem('odisea_welcome_seen', 'true');
+    } catch {
+      // Ignorar errores de almacenamiento en contextos restringidos
+    }
+  }
+
+  public isWelcomeModalActive(): boolean {
+    return this.isWelcomeModalVisible;
+  }
+
+  public showWelcomeModal(force = false) {
+    if (!force && this.checkWelcomeSeen()) {
+      return;
+    }
+
+    if (this.welcomeModalContainer) {
+      this.welcomeModalContainer.destroy();
+      this.welcomeModalContainer = null;
+    }
+    if (this.welcomeBackdrop) {
+      this.welcomeBackdrop.destroy();
+      this.welcomeBackdrop = null;
+    }
+
+    const { width, height } = this.scale;
+    this.isWelcomeModalVisible = true;
+
+    // 1. Telón de fondo oscuro translúcido que enfoca la atención
+    this.welcomeBackdrop = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72);
+    this.welcomeBackdrop.setDepth(200);
+    this.welcomeBackdrop.setInteractive();
+    this.welcomeBackdrop.on('pointerdown', () => this.closeWelcomeModal());
+
+    // 2. Contenedor principal de la ventana modal compacta y elegante
+    this.welcomeModalContainer = this.add.container(width / 2, height / 2);
+    this.welcomeModalContainer.setDepth(201);
+
+    const modalW = 630;
+    const modalH = 430;
+
+    // Sombra suave proyectada y panel tecnológico sci-fi
+    const shadow = this.add.rectangle(0, 5, modalW, modalH, 0x000000, 0.55);
+    const panelBg = this.add.rectangle(0, 0, modalW, modalH, 0x090f1d, 0.98);
+    panelBg.setStrokeStyle(2, 0x38bdf8);
+    panelBg.setInteractive(); // Bloquea clicks hacia el fondo exterior si se clickea dentro del panel
+
+    // Acento luminoso superior
+    const topAccent = this.add.rectangle(0, -modalH / 2 + 2, modalW - 4, 3, 0x38bdf8, 1);
+
+    // Botón de cerrar de esquina (✖)
+    const closeBtnBg = this.add.circle(modalW / 2 - 24, -modalH / 2 + 24, 13, 0x1e293b, 0.9).setInteractive({ useHandCursor: true });
+    closeBtnBg.setStrokeStyle(1, 0x475569);
+    const closeBtnTxt = this.add.text(modalW / 2 - 24, -modalH / 2 + 24, '✕', {
+      fontSize: '12px',
+      color: '#94a3b8',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    closeBtnBg.on('pointerover', () => {
+      closeBtnBg.setFillStyle(0xef4444);
+      closeBtnTxt.setColor('#ffffff');
+    });
+    closeBtnBg.on('pointerout', () => {
+      closeBtnBg.setFillStyle(0x1e293b);
+      closeBtnTxt.setColor('#94a3b8');
+    });
+    closeBtnBg.on('pointerdown', () => this.closeWelcomeModal());
+
+    // Cabecera institucional
+    const headerTag = this.add.text(0, -modalH / 2 + 30, '🛰️ NAVE EXPLORADORA ODISEA • PROTOCOLO DE INDUCCIÓN', {
+      fontSize: '10px',
+      color: '#38bdf8',
+      fontStyle: 'bold',
+      fontFamily: 'monospace'
+    }).setOrigin(0.5);
+
+    // Título Principal
+    const title = this.add.text(0, -modalH / 2 + 58, '¡Bienvenido Cadete a la Nave Odisea!', {
+      fontSize: '20px',
+      color: '#facc15',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    // Subtítulo
+    const subtitle = this.add.text(0, -modalH / 2 + 86, 'Completa tu misión de orientación vocacional en 3 sencillos pasos:', {
+      fontSize: '12px',
+      color: '#cbd5e1',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    const divider = this.add.rectangle(0, -modalH / 2 + 104, modalW - 64, 1, 0x1e293b, 0.9);
+
+    // 3 Pasos sencillos en tarjetas visuales
+    const stepCards: Phaser.GameObjects.GameObject[] = [];
+    const stepsData = [
+      {
+        num: '1',
+        title: 'Recorre los pasillos y visita las 5 estaciones de la nave.',
+        desc: 'Explora Software, Redes, Ciberseguridad, Ciencia de Datos y Gestión TI.',
+        color: 0x38bdf8,
+        bgFill: 0x0c4a6e,
+        y: -44
+      },
+      {
+        num: '2',
+        title: 'Resuelve los desafíos prácticos y dilemas de cada sector.',
+        desc: 'Interactúa con los encargados de área y pon a prueba tus habilidades.',
+        color: 0xfacc15,
+        bgFill: 0x713f12,
+        y: +26
+      },
+      {
+        num: '3',
+        title: 'Al finalizar, el sistema generará tu perfil de afinidad vocacional en TI.',
+        desc: 'Conoce tus fortalezas, áreas de mayor afinidad y recomendaciones formativas.',
+        color: 0x34d399,
+        bgFill: 0x064e3b,
+        y: +96
+      }
+    ];
+
+    stepsData.forEach(step => {
+      const cardW = modalW - 56;
+      const cardH = 56;
+      const cardBg = this.add.rectangle(0, step.y, cardW, cardH, 0x0f172a, 0.85);
+      cardBg.setStrokeStyle(1, 0x1e3a5f);
+
+      // Badge numérico
+      const badge = this.add.circle(-cardW / 2 + 28, step.y, 15, step.bgFill, 0.9);
+      badge.setStrokeStyle(1.5, step.color);
+
+      const numTxt = this.add.text(-cardW / 2 + 28, step.y, step.num, {
+        fontSize: '13px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        fontFamily: 'sans-serif'
+      }).setOrigin(0.5);
+
+      // Textos del paso
+      const stepTitle = this.add.text(-cardW / 2 + 54, step.y - 10, step.title, {
+        fontSize: '12px',
+        color: '#f8fafc',
+        fontStyle: 'bold',
+        fontFamily: 'sans-serif'
+      });
+
+      const stepDesc = this.add.text(-cardW / 2 + 54, step.y + 7, step.desc, {
+        fontSize: '10.5px',
+        color: '#94a3b8',
+        fontFamily: 'sans-serif'
+      });
+
+      stepCards.push(cardBg, badge, numTxt, stepTitle, stepDesc);
+    });
+
+    // Botón de acción principal: "¡Iniciar Exploración! [ESPACIO]"
+    const btnY = modalH / 2 - 40;
+    const btnW = 320;
+    const btnH = 42;
+
+    const btnBg = this.add.rectangle(0, btnY, btnW, btnH, 0x0284c7, 1);
+    btnBg.setStrokeStyle(1.5, 0x7dd3fc);
+    btnBg.setData('role', 'start-button');
+    btnBg.setInteractive({ useHandCursor: true });
+
+    const btnTxt = this.add.text(0, btnY, '¡Iniciar Exploración! [ESPACIO]', {
+      fontSize: '13.5px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      fontFamily: 'sans-serif'
+    }).setOrigin(0.5);
+
+    btnBg.on('pointerover', () => {
+      btnBg.setFillStyle(0x0ea5e9);
+      btnTxt.setScale(1.03);
+    });
+    btnBg.on('pointerout', () => {
+      btnBg.setFillStyle(0x0284c7);
+      btnTxt.setScale(1);
+    });
+    btnBg.on('pointerdown', () => {
+      this.closeWelcomeModal();
+    });
+
+    this.welcomeModalContainer.add([
+      shadow,
+      panelBg,
+      topAccent,
+      closeBtnBg,
+      closeBtnTxt,
+      headerTag,
+      title,
+      subtitle,
+      divider,
+      ...stepCards,
+      btnBg,
+      btnTxt
+    ]);
+
+    // Tecla Espacio para cerrar la bienvenida
+    if (this.input.keyboard) {
+      if (this.welcomeSpaceKey) {
+        this.welcomeSpaceKey.removeAllListeners();
+      }
+      this.welcomeSpaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      this.welcomeSpaceKey.once('down', () => {
+        this.closeWelcomeModal();
+      });
+    }
+
+    // Animación de entrada suave
+    this.welcomeBackdrop.setAlpha(0);
+    this.welcomeModalContainer.setAlpha(0);
+    this.welcomeModalContainer.setScale(0.88);
+
+    this.tweens.add({
+      targets: this.welcomeBackdrop,
+      alpha: 0.72,
+      duration: 250,
+      ease: 'Sine.easeOut'
+    });
+
+    this.tweens.add({
+      targets: this.welcomeModalContainer,
+      alpha: 1,
+      scale: 1,
+      duration: 300,
+      ease: 'Back.easeOut'
+    });
+
+    if (this.sound && this.cache.audio.exists('sfx_dialog_open')) {
+      this.sound.play('sfx_dialog_open', { volume: 0.35 });
+    }
+  }
+
+  public closeWelcomeModal() {
+    if (!this.isWelcomeModalVisible || !this.welcomeModalContainer) return;
+
+    this.isWelcomeModalVisible = false;
+    this.markWelcomeSeen();
+
+    if (this.welcomeSpaceKey) {
+      this.welcomeSpaceKey.removeAllListeners();
+      this.welcomeSpaceKey = null;
+    }
+
+    if (this.sound && this.cache.audio.exists('sfx_option_select')) {
+      this.sound.play('sfx_option_select', { volume: 0.4 });
+    }
+
+    const container = this.welcomeModalContainer;
+    const backdrop = this.welcomeBackdrop;
+    this.welcomeModalContainer = null;
+    this.welcomeBackdrop = null;
+
+    this.tweens.add({
+      targets: [container, backdrop],
+      alpha: 0,
+      scale: 0.94,
+      duration: 200,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        if (container) container.destroy();
+        if (backdrop) backdrop.destroy();
+      }
+    });
   }
 }

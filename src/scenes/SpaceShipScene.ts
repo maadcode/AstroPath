@@ -517,11 +517,15 @@ export class SpaceShipScene extends Phaser.Scene {
   private handleInteractionInput() {
     if (this.isInteracting || !this.nearbyNpc) return;
 
+    const uiScene = this.scene.get('UIScene') as UIScene;
+    if (uiScene && uiScene.isWelcomeModalActive && uiScene.isWelcomeModalActive()) {
+      return;
+    }
+
     if (this.time.now - this.lastInteractionEndTime < this.INTERACTION_COOLDOWN_MS) {
       return;
     }
 
-    const uiScene = this.scene.get('UIScene') as UIScene;
     const isMobileAction = uiScene ? uiScene.isActionButtonPressed : false;
 
     const isPressed = Phaser.Input.Keyboard.JustDown(this.interactKey) ||
