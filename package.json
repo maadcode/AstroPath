@@ -1,0 +1,32 @@
+{
+  "name": "astropath",
+  "version": "1.0.0",
+  "description": "AstroPath: RPG top-down 2D de exploración espacial y orientación vocacional en tecnología",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maadcode/syscoffee.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/maadcode/syscoffee/issues"
+  },
+  "homepage": "https://github.com/maadcode/syscoffee#readme",
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}
