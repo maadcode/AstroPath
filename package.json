@@ -1,7 +1,7 @@
 {
-  "name": "cafe-central",
+  "name": "astropath",
   "version": "1.0.0",
-  "description": "",
+  "description": "AstroPath: RPG top-down 2D de exploración espacial y orientación vocacional en tecnología",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
