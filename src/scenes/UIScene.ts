@@ -29,19 +29,19 @@ export class UIScene extends Phaser.Scene {
   private isRadarVisible = true;
 
   // Parámetros de proyección del mapa Kenney a radar
-  private readonly SHIP_MIN_X = 720;
-  private readonly SHIP_MAX_X = 1392;
-  private readonly SHIP_MIN_Y = 20;
-  private readonly SHIP_MAX_Y = 780;
+  private readonly SHIP_MIN_X = 0;
+  private readonly SHIP_MAX_X = 896;
+  private readonly SHIP_MIN_Y = 0;
+  private readonly SHIP_MAX_Y = 864;
   private readonly RADAR_INNER_W = 104;
   private readonly RADAR_INNER_H = 102;
 
   private readonly STATION_COORDS: { [id: string]: { x: number; y: number; name: string } } = {
-    station_dev: { x: 880, y: 112, name: 'Taller' },
-    station_net: { x: 1232, y: 144, name: 'Antenas' },
-    station_sec: { x: 880, y: 304, name: 'Seguridad' },
-    station_data: { x: 880, y: 464, name: 'Cultivos' },
-    station_biz: { x: 1232, y: 592, name: 'Salón' }
+    station_dev: { x: 272, y: 112, name: 'Taller' },
+    station_net: { x: 688, y: 112, name: 'Antenas' },
+    station_sec: { x: 176, y: 240, name: 'Seguridad' },
+    station_data: { x: 144, y: 528, name: 'Cultivos' },
+    station_biz: { x: 688, y: 640, name: 'Salón' }
   };
 
   // Soporte móvil: Botones virtuales
@@ -165,30 +165,30 @@ export class UIScene extends Phaser.Scene {
     mapGraphics.lineBetween(0, -39, 0, 57);
 
     // Pasillo central de la nave
-    const corridorCenter = this.worldToRadar(1072, 360);
+    const corridorCenter = this.worldToRadar(464, 336);
     mapGraphics.fillStyle(0x132238, 0.7);
     mapGraphics.lineStyle(1, 0x1e3a5f, 0.85);
     mapGraphics.fillRect(corridorCenter.x - 7, corridorCenter.y - 32, 14, 66);
     mapGraphics.strokeRect(corridorCenter.x - 7, corridorCenter.y - 32, 14, 66);
 
     // Salas temáticas esquemáticas
-    const roomDev = this.worldToRadar(880, 112);
+    const roomDev = this.worldToRadar(272, 112);
     mapGraphics.fillRect(roomDev.x - 14, roomDev.y - 11, 28, 22);
     mapGraphics.strokeRect(roomDev.x - 14, roomDev.y - 11, 28, 22);
 
-    const roomNet = this.worldToRadar(1232, 144);
+    const roomNet = this.worldToRadar(688, 112);
     mapGraphics.fillRect(roomNet.x - 14, roomNet.y - 11, 28, 22);
     mapGraphics.strokeRect(roomNet.x - 14, roomNet.y - 11, 28, 22);
 
-    const roomSec = this.worldToRadar(880, 304);
+    const roomSec = this.worldToRadar(176, 240);
     mapGraphics.fillRect(roomSec.x - 14, roomSec.y - 10, 28, 20);
     mapGraphics.strokeRect(roomSec.x - 14, roomSec.y - 10, 28, 20);
 
-    const roomData = this.worldToRadar(880, 464);
+    const roomData = this.worldToRadar(144, 528);
     mapGraphics.fillRect(roomData.x - 14, roomData.y - 10, 28, 20);
     mapGraphics.strokeRect(roomData.x - 14, roomData.y - 10, 28, 20);
 
-    const roomBiz = this.worldToRadar(1232, 592);
+    const roomBiz = this.worldToRadar(688, 640);
     mapGraphics.fillRect(roomBiz.x - 16, roomBiz.y - 12, 32, 24);
     mapGraphics.strokeRect(roomBiz.x - 16, roomBiz.y - 12, 32, 24);
 
@@ -244,7 +244,7 @@ export class UIScene extends Phaser.Scene {
     });
 
     // 4. Punto cian pulsante: astronauta (jugador)
-    const initialPlayerPos = this.worldToRadar(1072, 304);
+    const initialPlayerPos = this.worldToRadar(464, 336);
     this.radarPlayerHalo = this.add.circle(initialPlayerPos.x, initialPlayerPos.y, 6.5, 0x00f0ff, 0.45);
     this.radarPlayerDot = this.add.circle(initialPlayerPos.x, initialPlayerPos.y, 3.5, 0x38bdf8, 1);
 

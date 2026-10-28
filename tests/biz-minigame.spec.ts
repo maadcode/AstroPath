@@ -12,8 +12,8 @@ test.describe('Biz Minigame (Sala Común - Dra. Valeria)', () => {
       const dialogScene = game.scene.getScene('DialogScene') as any;
       const gameState = spaceShip.gameState;
 
-      // 1. Initial State: Dra. Valeria at (1232, 592)
-      spaceShip.player.setPosition(1232, 615);
+      // 1. Initial State: Dra. Valeria at (688, 640)
+      spaceShip.player.setPosition(688, 660);
       spaceShip.checkNPCProximity();
       spaceShip.triggerInteraction(spaceShip.nearbyNpc);
 
@@ -26,8 +26,8 @@ test.describe('Biz Minigame (Sala Común - Dra. Valeria)', () => {
       if (firstEntendido) firstEntendido.emit('pointerdown');
       await new Promise(r => setTimeout(r, 400));
 
-      // 2. Visit Witness 1: Lucía at (1168, 624)
-      spaceShip.player.setPosition(1168, 640);
+      // 2. Visit Witness 1: Lucía at (624, 688)
+      spaceShip.player.setPosition(624, 705);
       spaceShip.checkNPCProximity();
       spaceShip.triggerInteraction(spaceShip.nearbyNpc);
       const luciaDialogMsg = dialogScene.messageText?.text;
@@ -35,8 +35,8 @@ test.describe('Biz Minigame (Sala Común - Dra. Valeria)', () => {
       if (luciaEntendido) luciaEntendido.emit('pointerdown');
       await new Promise(r => setTimeout(r, 400));
 
-      // 3. Visit Witness 2: Braulio at (1264, 624)
-      spaceShip.player.setPosition(1264, 640);
+      // 3. Visit Witness 2: Braulio at (752, 688)
+      spaceShip.player.setPosition(752, 705);
       spaceShip.checkNPCProximity();
       spaceShip.triggerInteraction(spaceShip.nearbyNpc);
       const braulioDialogMsg = dialogScene.messageText?.text;
@@ -47,8 +47,8 @@ test.describe('Biz Minigame (Sala Común - Dra. Valeria)', () => {
       const afterWitnessesVisited = gameState.allPassengersVisited('station_biz');
       console.log('luciaDialogMsg:', luciaDialogMsg, 'braulioDialogMsg:', braulioDialogMsg, 'afterWitnessesVisited:', afterWitnessesVisited);
 
-      // 4. Return to Dra. Valeria at (1232, 592) -> Now should invite to BizMinigameScene!
-      spaceShip.player.setPosition(1232, 615);
+      // 4. Return to Dra. Valeria at (688, 640) -> Now should invite to BizMinigameScene!
+      spaceShip.player.setPosition(688, 660);
       spaceShip.checkNPCProximity();
       spaceShip.triggerInteraction(spaceShip.nearbyNpc);
       const readyDialogMsg = dialogScene.messageText?.text;

@@ -59,8 +59,8 @@ export class SpaceShipScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
     // 2. Crear al Jugador en el pasillo central del mapa (tile 33, 9)
-    const startX = 1072;
-    const startY = 304;
+    const startX = 464;
+    const startY = 336;
     this.player = this.physics.add.sprite(startX, startY, 'player_down_idle');
     this.player.setCollideWorldBounds(true);
     this.player.setScale(0.95);
@@ -212,12 +212,12 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private createStationLabels() {
     const labels = [
-      { x: 880, y: 55, name: 'BAHÍA DE ENSAMBLAJE', color: '#38bdf8' },
-      { x: 1232, y: 55, name: 'TORRE DE ANTENAS', color: '#34d399' },
-      { x: 880, y: 245, name: 'PUESTO DE VIGILANCIA', color: '#f87171' },
-      { x: 880, y: 410, name: 'LABORATORIO DE CULTIVOS', color: '#c084fc' },
-      { x: 1232, y: 505, name: 'SALA COMÚN', color: '#fbbf24' },
-      { x: 1072, y: 245, name: 'PASILLO CENTRAL', color: '#94a3b8' }
+      { x: 272, y: 55, name: 'BAHÍA DE ENSAMBLAJE', color: '#38bdf8' },
+      { x: 688, y: 55, name: 'TORRE DE ANTENAS', color: '#34d399' },
+      { x: 176, y: 195, name: 'PUESTO DE VIGILANCIA', color: '#f87171' },
+      { x: 144, y: 470, name: 'LABORATORIO DE CULTIVOS', color: '#c084fc' },
+      { x: 688, y: 590, name: 'SALA COMÚN', color: '#fbbf24' },
+      { x: 464, y: 280, name: 'PASILLO CENTRAL', color: '#94a3b8' }
     ];
 
     labels.forEach(l => {
@@ -236,30 +236,30 @@ export class SpaceShipScene extends Phaser.Scene {
     const configs = [
       {
         stationId: 'station_dev',
-        leaderX: 880, leaderY: 112, // Sala superior izquierda (Taller)
+        leaderX: 272, leaderY: 112, // Sala superior izquierda (Taller)
         passengers: []
       },
       {
         stationId: 'station_net',
-        leaderX: 1232, leaderY: 144, // Sala superior derecha (Redes)
+        leaderX: 688, leaderY: 112, // Sala superior derecha (Redes)
         passengers: []
       },
       {
         stationId: 'station_sec',
-        leaderX: 880, leaderY: 304, // Sala media izquierda (Seguridad)
+        leaderX: 176, leaderY: 240, // Sala media izquierda (Seguridad)
         passengers: []
       },
       {
         stationId: 'station_data',
-        leaderX: 880, leaderY: 464, // Sala inferior izquierda (Datos)
+        leaderX: 144, leaderY: 528, // Sala lateral izquierda (Cultivos)
         passengers: []
       },
       {
         stationId: 'station_biz',
-        leaderX: 1232, leaderY: 592, // Sala inferior derecha (Lounge)
+        leaderX: 688, leaderY: 640, // Sala inferior derecha (Lounge)
         passengers: [
-          { pId: 'p_biz_1', x: 1168, y: 624 },
-          { pId: 'p_biz_2', x: 1264, y: 624 }
+          { pId: 'p_biz_1', x: 624, y: 688 },
+          { pId: 'p_biz_2', x: 752, y: 688 }
         ]
       }
     ];
@@ -329,7 +329,7 @@ export class SpaceShipScene extends Phaser.Scene {
 
   private createAmbientParticles() {
     // Delimitación exterior de la nave espacial (para evitar que cualquier partícula entre a las salas)
-    const shipBounds = new Phaser.Geom.Rectangle(720, 20, 665, 755);
+    const shipBounds = new Phaser.Geom.Rectangle(0, 0, 896, 864);
 
     // Fuente de emisión que genera puntos en todo el espacio exterior (arriba, abajo, izquierda y derecha)
     const spaceSource = {
@@ -340,7 +340,7 @@ export class SpaceShipScene extends Phaser.Scene {
           x = Phaser.Math.Between(10, 1910);
           y = Phaser.Math.Between(10, 1430);
           // Si el punto NO está dentro del casco de la nave, es espacio exterior válido
-          if (!(x >= 720 && x <= 1385 && y >= 20 && y <= 775)) {
+          if (!(x >= 0 && x <= 896 && y >= 0 && y <= 864)) {
             break;
           }
         }
